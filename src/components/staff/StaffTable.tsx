@@ -11,15 +11,23 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Edit2 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { MoreHorizontal, Edit2, Trash2 } from "lucide-react";
 import { format } from "date-fns";
 import type { StaffMember } from "@/pages/Staff";
 
 interface StaffTableProps {
   staff: StaffMember[];
   isLoading: boolean;
-  onEditRole: (staff: StaffMember) => void;
-  canManageRoles: boolean;
+  onEdit: (staff: StaffMember) => void;
+  onDelete: (staff: StaffMember) => void;
+  canManage: boolean;
+  currentUserId?: string;
 }
 
 const roleConfig: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
@@ -35,8 +43,10 @@ const roleConfig: Record<string, { label: string; variant: "default" | "secondar
 export const StaffTable = ({
   staff,
   isLoading,
-  onEditRole,
-  canManageRoles,
+  onEdit,
+  onDelete,
+  canManage,
+  currentUserId,
 }: StaffTableProps) => {
   if (isLoading) {
     return (
@@ -79,12 +89,13 @@ export const StaffTable = ({
             <TableHead>Email</TableHead>
             <TableHead>Role</TableHead>
             <TableHead>Joined</TableHead>
-            {canManageRoles && <TableHead className="text-right">Actions</TableHead>}
+            {canManage && <TableHead className="text-right">Actions</TableHead>}
           </TableRow>
         </TableHeader>
         <TableBody>
           {staff.map((member) => {
             const role = member.role ? roleConfig[member.role] : null;
+            const isCurrentUser = member.id === currentUserId;
             
             return (
               <TableRow key={member.id}>
@@ -96,9 +107,14 @@ export const StaffTable = ({
                         {getInitials(member.full_name, member.email)}
                       </AvatarFallback>
                     </Avatar>
-                    <span className="font-medium">
-                      {member.full_name || "Unnamed"}
-                    </span>
+                    <div>
+                      <span className="font-medium">
+                        {member.full_name || "Unnamed"}
+                      </span>
+                      {isCurrentUser && (
+                        <span className="ml-2 text-xs text-muted-foreground">(You)</span>
+                      )}
+                    </div>
                   </div>
                 </TableCell>
                 <TableCell className="text-muted-foreground">
@@ -116,16 +132,30 @@ export const StaffTable = ({
                     ? format(new Date(member.created_at), "MMM d, yyyy")
                     : "-"}
                 </TableCell>
-                {canManageRoles && (
+                {canManage && (
                   <TableCell className="text-right">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => onEditRole(member)}
-                    >
-                      <Edit2 className="h-4 w-4 mr-1" />
-                      Edit Role
-                    </Button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon">
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => onEdit(member)}>
+                          <Edit2 className="h-4 w-4 mr-2" />
+                          Edit
+                        </DropdownMenuItem>
+                        {!isCurrentUser && (
+                          <DropdownMenuItem
+                            className="text-destructive"
+                            onClick={() => onDelete(member)}
+                          >
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Delete
+                          </DropdownMenuItem>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </TableCell>
                 )}
               </TableRow>
