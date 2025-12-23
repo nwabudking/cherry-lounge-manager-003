@@ -8,6 +8,7 @@ import { InventoryTable } from "@/components/inventory/InventoryTable";
 import { InventoryItemDialog } from "@/components/inventory/InventoryItemDialog";
 import { StockMovementDialog } from "@/components/inventory/StockMovementDialog";
 import { LowStockAlert } from "@/components/inventory/LowStockAlert";
+import { AddCategoryDialog } from "@/components/inventory/AddCategoryDialog";
 
 export interface InventoryItem {
   id: string;
@@ -35,8 +36,10 @@ const Inventory = () => {
   const [showLowStock, setShowLowStock] = useState(false);
   const [isItemDialogOpen, setIsItemDialogOpen] = useState(false);
   const [isMovementDialogOpen, setIsMovementDialogOpen] = useState(false);
+  const [isCategoryDialogOpen, setIsCategoryDialogOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
   const [movementItem, setMovementItem] = useState<InventoryItem | null>(null);
+  const [customCategories, setCustomCategories] = useState<string[]>([]);
 
   const { data: items = [], isLoading } = useQuery({
     queryKey: ["inventory-items"],
@@ -52,7 +55,8 @@ const Inventory = () => {
     },
   });
 
-  const categories = [...new Set(items.map((i) => i.category).filter(Boolean))];
+  const itemCategories = [...new Set(items.map((i) => i.category).filter(Boolean))] as string[];
+  const categories = [...new Set([...itemCategories, ...customCategories])];
 
   const lowStockItems = items.filter((i) => i.current_stock <= i.min_stock_level);
 
@@ -180,18 +184,24 @@ const Inventory = () => {
     setIsMovementDialogOpen(true);
   };
 
+  const handleAddCategory = (category: string) => {
+    setCustomCategories(prev => [...prev, category]);
+    toast({ title: "Category Added", description: `"${category}" is now available for items.` });
+  };
+
   return (
     <div className="space-y-6">
       <InventoryHeader
         totalItems={items.length}
         lowStockCount={lowStockItems.length}
         onAddItem={handleAddItem}
+        onAddCategory={() => setIsCategoryDialogOpen(true)}
         canManage={canManage}
         searchQuery={searchQuery}
         setSearchQuery={setSearchQuery}
         categoryFilter={categoryFilter}
         setCategoryFilter={setCategoryFilter}
-        categories={categories as string[]}
+        categories={categories}
         showLowStock={showLowStock}
         setShowLowStock={setShowLowStock}
       />
@@ -215,7 +225,14 @@ const Inventory = () => {
         onOpenChange={setIsItemDialogOpen}
         onSave={(data) => saveItemMutation.mutate(data)}
         isSaving={saveItemMutation.isPending}
-        categories={categories as string[]}
+        categories={categories}
+      />
+
+      <AddCategoryDialog
+        open={isCategoryDialogOpen}
+        onOpenChange={setIsCategoryDialogOpen}
+        existingCategories={categories}
+        onAddCategory={handleAddCategory}
       />
 
       <StockMovementDialog

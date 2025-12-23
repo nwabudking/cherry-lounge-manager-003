@@ -10,12 +10,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Package, AlertTriangle, Plus, Search } from "lucide-react";
+import { Package, AlertTriangle, Plus, Search, FolderPlus } from "lucide-react";
 
 interface InventoryHeaderProps {
   totalItems: number;
   lowStockCount: number;
   onAddItem: () => void;
+  onAddCategory: () => void;
   canManage: boolean;
   searchQuery: string;
   setSearchQuery: (value: string) => void;
@@ -30,6 +31,7 @@ export const InventoryHeader = ({
   totalItems,
   lowStockCount,
   onAddItem,
+  onAddCategory,
   canManage,
   searchQuery,
   setSearchQuery,
@@ -47,10 +49,16 @@ export const InventoryHeader = ({
           <p className="text-muted-foreground">Track stock levels and manage inventory</p>
         </div>
         {canManage && (
-          <Button onClick={onAddItem}>
-            <Plus className="h-4 w-4 mr-2" />
-            Add Item
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={onAddCategory}>
+              <FolderPlus className="h-4 w-4 mr-2" />
+              Add Category
+            </Button>
+            <Button onClick={onAddItem}>
+              <Plus className="h-4 w-4 mr-2" />
+              Add Item
+            </Button>
+          </div>
         )}
       </div>
 
