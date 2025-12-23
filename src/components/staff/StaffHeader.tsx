@@ -12,8 +12,8 @@ import { Users, UserPlus, Search } from "lucide-react";
 
 interface StaffHeaderProps {
   staffCount: number;
-  onInvite: () => void;
-  canInvite: boolean;
+  onAddStaff: () => void;
+  canManage: boolean;
   searchQuery: string;
   setSearchQuery: (value: string) => void;
   roleFilter: string;
@@ -32,8 +32,8 @@ const roleLabels: Record<string, string> = {
 
 export const StaffHeader = ({
   staffCount,
-  onInvite,
-  canInvite,
+  onAddStaff,
+  canManage,
   searchQuery,
   setSearchQuery,
   roleFilter,
@@ -46,10 +46,10 @@ export const StaffHeader = ({
           <h1 className="text-2xl font-bold text-foreground">Staff Management</h1>
           <p className="text-muted-foreground">Manage team members and their roles</p>
         </div>
-        {canInvite && (
-          <Button onClick={onInvite}>
+        {canManage && (
+          <Button onClick={onAddStaff}>
             <UserPlus className="h-4 w-4 mr-2" />
-            Invite Staff
+            Add Staff
           </Button>
         )}
       </div>

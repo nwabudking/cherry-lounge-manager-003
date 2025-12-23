@@ -5,8 +5,8 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { StaffHeader } from "@/components/staff/StaffHeader";
 import { StaffTable } from "@/components/staff/StaffTable";
-import { StaffRoleDialog } from "@/components/staff/StaffRoleDialog";
-import { InviteStaffDialog } from "@/components/staff/InviteStaffDialog";
+import { AddEditStaffDialog } from "@/components/staff/AddEditStaffDialog";
+import { DeleteStaffDialog } from "@/components/staff/DeleteStaffDialog";
 import type { AppRole } from "@/contexts/AuthContext";
 
 export interface StaffMember {
@@ -20,19 +20,19 @@ export interface StaffMember {
 
 const Staff = () => {
   const { toast } = useToast();
-  const { role: currentUserRole } = useAuth();
+  const { role: currentUserRole, user } = useAuth();
   const queryClient = useQueryClient();
   
   const [selectedStaff, setSelectedStaff] = useState<StaffMember | null>(null);
-  const [isRoleDialogOpen, setIsRoleDialogOpen] = useState(false);
-  const [isInviteDialogOpen, setIsInviteDialogOpen] = useState(false);
+  const [isAddEditDialogOpen, setIsAddEditDialogOpen] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState<string>("all");
 
   const { data: staffMembers = [], isLoading } = useQuery({
     queryKey: ["staff-members"],
     queryFn: async () => {
-      // Fetch profiles
       const { data: profiles, error: profilesError } = await supabase
         .from("profiles")
         .select("*")
@@ -40,14 +40,12 @@ const Staff = () => {
 
       if (profilesError) throw profilesError;
 
-      // Fetch roles
       const { data: roles, error: rolesError } = await supabase
         .from("user_roles")
         .select("user_id, role");
 
       if (rolesError) throw rolesError;
 
-      // Map roles to profiles
       const roleMap = new Map(roles?.map((r) => [r.user_id, r.role]));
       
       return profiles?.map((profile) => ({
@@ -57,44 +55,80 @@ const Staff = () => {
     },
   });
 
-  const updateRoleMutation = useMutation({
-    mutationFn: async ({ userId, role }: { userId: string; role: AppRole }) => {
-      // Check if role exists
-      const { data: existing } = await supabase
-        .from("user_roles")
-        .select("id")
-        .eq("user_id", userId)
-        .maybeSingle();
+  const createStaffMutation = useMutation({
+    mutationFn: async (data: { email: string; password: string; fullName: string; role: AppRole }) => {
+      const { data: result, error } = await supabase.functions.invoke("manage-staff", {
+        body: {
+          action: "create",
+          email: data.email,
+          password: data.password,
+          fullName: data.fullName,
+          role: data.role,
+        },
+      });
 
-      if (existing) {
-        const { error } = await supabase
-          .from("user_roles")
-          .update({ role })
-          .eq("user_id", userId);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase
-          .from("user_roles")
-          .insert({ user_id: userId, role });
-        if (error) throw error;
-      }
+      if (error) throw error;
+      if (result.error) throw new Error(result.error);
+      return result;
     },
     onSuccess: () => {
-      toast({
-        title: "Role Updated",
-        description: "Staff member's role has been updated successfully.",
-      });
+      toast({ title: "Staff Created", description: "New staff member added successfully." });
       queryClient.invalidateQueries({ queryKey: ["staff-members"] });
-      setIsRoleDialogOpen(false);
+      setIsAddEditDialogOpen(false);
       setSelectedStaff(null);
     },
-    onError: (error) => {
-      console.error(error);
-      toast({
-        title: "Error",
-        description: "Failed to update role. You may not have permission.",
-        variant: "destructive",
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const updateStaffMutation = useMutation({
+    mutationFn: async (data: { userId: string; fullName: string; role: AppRole }) => {
+      const { data: result, error } = await supabase.functions.invoke("manage-staff", {
+        body: {
+          action: "update",
+          userId: data.userId,
+          fullName: data.fullName,
+          role: data.role,
+        },
       });
+
+      if (error) throw error;
+      if (result.error) throw new Error(result.error);
+      return result;
+    },
+    onSuccess: () => {
+      toast({ title: "Staff Updated", description: "Staff member updated successfully." });
+      queryClient.invalidateQueries({ queryKey: ["staff-members"] });
+      setIsAddEditDialogOpen(false);
+      setSelectedStaff(null);
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const deleteStaffMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      const { data: result, error } = await supabase.functions.invoke("manage-staff", {
+        body: {
+          action: "delete",
+          userId,
+        },
+      });
+
+      if (error) throw error;
+      if (result.error) throw new Error(result.error);
+      return result;
+    },
+    onSuccess: () => {
+      toast({ title: "Staff Deleted", description: "Staff member removed successfully." });
+      queryClient.invalidateQueries({ queryKey: ["staff-members"] });
+      setIsDeleteDialogOpen(false);
+      setSelectedStaff(null);
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
     },
   });
 
@@ -109,19 +143,48 @@ const Staff = () => {
     return matchesSearch && matchesRole;
   });
 
-  const canManageRoles = currentUserRole === "super_admin";
+  const canManageStaff = currentUserRole === "super_admin" || currentUserRole === "manager";
 
-  const handleEditRole = (staff: StaffMember) => {
+  const handleAddStaff = () => {
+    setSelectedStaff(null);
+    setIsEditing(false);
+    setIsAddEditDialogOpen(true);
+  };
+
+  const handleEditStaff = (staff: StaffMember) => {
     setSelectedStaff(staff);
-    setIsRoleDialogOpen(true);
+    setIsEditing(true);
+    setIsAddEditDialogOpen(true);
+  };
+
+  const handleDeleteStaff = (staff: StaffMember) => {
+    setSelectedStaff(staff);
+    setIsDeleteDialogOpen(true);
+  };
+
+  const handleSaveStaff = (data: { email?: string; password?: string; fullName: string; role: AppRole }) => {
+    if (isEditing && selectedStaff) {
+      updateStaffMutation.mutate({
+        userId: selectedStaff.id,
+        fullName: data.fullName,
+        role: data.role,
+      });
+    } else if (data.email && data.password) {
+      createStaffMutation.mutate({
+        email: data.email,
+        password: data.password,
+        fullName: data.fullName,
+        role: data.role,
+      });
+    }
   };
 
   return (
     <div className="space-y-6">
       <StaffHeader
         staffCount={staffMembers.length}
-        onInvite={() => setIsInviteDialogOpen(true)}
-        canInvite={canManageRoles}
+        onAddStaff={handleAddStaff}
+        canManage={canManageStaff}
         searchQuery={searchQuery}
         setSearchQuery={setSearchQuery}
         roleFilter={roleFilter}
@@ -131,23 +194,27 @@ const Staff = () => {
       <StaffTable
         staff={filteredStaff}
         isLoading={isLoading}
-        onEditRole={handleEditRole}
-        canManageRoles={canManageRoles}
+        onEdit={handleEditStaff}
+        onDelete={handleDeleteStaff}
+        canManage={canManageStaff}
+        currentUserId={user?.id}
       />
 
-      <StaffRoleDialog
+      <AddEditStaffDialog
         staff={selectedStaff}
-        open={isRoleDialogOpen}
-        onOpenChange={setIsRoleDialogOpen}
-        onUpdateRole={(role) =>
-          selectedStaff && updateRoleMutation.mutate({ userId: selectedStaff.id, role })
-        }
-        isUpdating={updateRoleMutation.isPending}
+        open={isAddEditDialogOpen}
+        onOpenChange={setIsAddEditDialogOpen}
+        onSave={handleSaveStaff}
+        isSaving={createStaffMutation.isPending || updateStaffMutation.isPending}
+        isEditing={isEditing}
       />
 
-      <InviteStaffDialog
-        open={isInviteDialogOpen}
-        onOpenChange={setIsInviteDialogOpen}
+      <DeleteStaffDialog
+        staff={selectedStaff}
+        open={isDeleteDialogOpen}
+        onOpenChange={setIsDeleteDialogOpen}
+        onConfirm={() => selectedStaff && deleteStaffMutation.mutate(selectedStaff.id)}
+        isDeleting={deleteStaffMutation.isPending}
       />
     </div>
   );
