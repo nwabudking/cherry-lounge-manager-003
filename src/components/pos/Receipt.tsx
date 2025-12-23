@@ -8,8 +8,6 @@ interface ReceiptProps {
   tableNumber?: string;
   items: CartItem[];
   subtotal: number;
-  vatAmount: number;
-  serviceCharge: number;
   total: number;
   paymentMethod: string;
   cashierName?: string;
@@ -37,8 +35,6 @@ export const Receipt = forwardRef<HTMLDivElement, ReceiptProps>(
       tableNumber,
       items,
       subtotal,
-      vatAmount,
-      serviceCharge,
       total,
       paymentMethod,
       cashierName,
@@ -126,14 +122,6 @@ export const Receipt = forwardRef<HTMLDivElement, ReceiptProps>(
           <div className="flex justify-between">
             <span>Subtotal:</span>
             <span>₦{subtotal.toLocaleString()}</span>
-          </div>
-          <div className="flex justify-between">
-            <span>VAT (7.5%):</span>
-            <span>₦{vatAmount.toLocaleString()}</span>
-          </div>
-          <div className="flex justify-between">
-            <span>Service Charge:</span>
-            <span>₦{serviceCharge.toLocaleString()}</span>
           </div>
           <div className="border-t border-gray-400 my-2" />
           <div className="flex justify-between font-bold text-base">

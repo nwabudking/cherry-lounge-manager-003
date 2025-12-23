@@ -27,6 +27,7 @@ const POS = () => {
   const queryClient = useQueryClient();
   
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
   const [cart, setCart] = useState<CartItem[]>([]);
   const [checkoutCart, setCheckoutCart] = useState<CartItem[]>([]);
   const [orderType, setOrderType] = useState<OrderType>("dine_in");
@@ -69,9 +70,7 @@ const POS = () => {
   const createOrderMutation = useMutation({
     mutationFn: async (paymentMethod: string) => {
       const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
-      const vatAmount = subtotal * 0.075; // 7.5% VAT
-      const serviceCharge = subtotal * 0.10; // 10% service charge
-      const totalAmount = subtotal + vatAmount + serviceCharge;
+      const totalAmount = subtotal;
 
       // Generate order number
       const { data: orderNumber } = await supabase.rpc("generate_order_number");
@@ -84,8 +83,8 @@ const POS = () => {
           order_type: orderType,
           table_number: orderType === "dine_in" ? tableNumber : null,
           subtotal,
-          vat_amount: vatAmount,
-          service_charge: serviceCharge,
+          vat_amount: 0,
+          service_charge: 0,
           total_amount: totalAmount,
           created_by: user?.id,
         })
@@ -184,15 +183,16 @@ const POS = () => {
   const clearCart = () => setCart([]);
 
   const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const vatAmount = subtotal * 0.075;
-  const serviceCharge = subtotal * 0.10;
-  const total = subtotal + vatAmount + serviceCharge;
+  const total = subtotal;
 
   // For receipt display after order completion
   const receiptSubtotal = checkoutCart.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const receiptVat = receiptSubtotal * 0.075;
-  const receiptService = receiptSubtotal * 0.10;
-  const receiptTotal = receiptSubtotal + receiptVat + receiptService;
+  const receiptTotal = receiptSubtotal;
+
+  // Filter menu items by search query
+  const filteredMenuItems = menuItems.filter((item) =>
+    item.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   const handleCloseCheckout = () => {
     setIsCheckoutOpen(false);
@@ -215,17 +215,17 @@ const POS = () => {
           categories={categories}
           selectedCategory={selectedCategory}
           onSelectCategory={setSelectedCategory}
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
         />
         
-        <MenuGrid items={menuItems} onAddToCart={addToCart} />
+        <MenuGrid items={filteredMenuItems} onAddToCart={addToCart} />
       </div>
 
       {/* Right Panel - Cart */}
       <CartPanel
         cart={cart}
         subtotal={subtotal}
-        vatAmount={vatAmount}
-        serviceCharge={serviceCharge}
         total={total}
         onUpdateQuantity={updateQuantity}
         onRemoveItem={removeFromCart}
@@ -238,8 +238,6 @@ const POS = () => {
         onOpenChange={setIsCheckoutOpen}
         total={completedOrder ? receiptTotal : total}
         subtotal={completedOrder ? receiptSubtotal : subtotal}
-        vatAmount={completedOrder ? receiptVat : vatAmount}
-        serviceCharge={completedOrder ? receiptService : serviceCharge}
         cart={completedOrder ? checkoutCart : cart}
         orderType={orderType}
         tableNumber={tableNumber}

@@ -8,8 +8,6 @@ import { CartItem } from "@/pages/POS";
 interface CartPanelProps {
   cart: CartItem[];
   subtotal: number;
-  vatAmount: number;
-  serviceCharge: number;
   total: number;
   onUpdateQuantity: (id: string, delta: number) => void;
   onRemoveItem: (id: string) => void;
@@ -28,8 +26,6 @@ const formatPrice = (price: number) => {
 export const CartPanel = ({
   cart,
   subtotal,
-  vatAmount,
-  serviceCharge,
   total,
   onUpdateQuantity,
   onRemoveItem,
@@ -122,14 +118,6 @@ export const CartPanel = ({
             <div className="flex justify-between">
               <span className="text-muted-foreground">Subtotal</span>
               <span>{formatPrice(subtotal)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">VAT (7.5%)</span>
-              <span>{formatPrice(vatAmount)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Service (10%)</span>
-              <span>{formatPrice(serviceCharge)}</span>
             </div>
           </div>
 

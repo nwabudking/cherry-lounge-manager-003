@@ -16,8 +16,6 @@ interface CheckoutDialogProps {
   onOpenChange: (open: boolean) => void;
   total: number;
   subtotal: number;
-  vatAmount: number;
-  serviceCharge: number;
   cart: CartItem[];
   orderType: string;
   tableNumber: string;
@@ -48,8 +46,6 @@ export const CheckoutDialog = ({
   onOpenChange,
   total,
   subtotal,
-  vatAmount,
-  serviceCharge,
   cart,
   orderType,
   tableNumber,
@@ -149,8 +145,6 @@ export const CheckoutDialog = ({
                 tableNumber={tableNumber || undefined}
                 items={cart}
                 subtotal={subtotal}
-                vatAmount={vatAmount}
-                serviceCharge={serviceCharge}
                 total={total}
                 paymentMethod={selectedMethod || "cash"}
                 cashierName={cashierName}
