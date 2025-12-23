@@ -4,6 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { LowStockDialog } from '@/components/dashboard/LowStockDialog';
 import {
   DollarSign,
   ShoppingCart,
@@ -57,6 +58,7 @@ const KPICard = ({ title, value, change, changeType = 'neutral', icon: Icon, ico
 
 const Dashboard = () => {
   const { profile } = useAuth();
+  const [lowStockDialogOpen, setLowStockDialogOpen] = useState(false);
   const today = new Date();
   const todayStart = startOfDay(today);
   const todayEnd = endOfDay(today);
@@ -215,15 +217,27 @@ const Dashboard = () => {
           icon={Grid3X3}
           isLoading={isLoading}
         />
-        <KPICard
-          title="Low Stock Alerts"
-          value={lowStockItems.length.toString()}
-          change={lowStockItems.length > 0 ? "Needs attention" : "All stocked"}
-          changeType={lowStockItems.length > 0 ? "negative" : "positive"}
-          icon={AlertTriangle}
-          isLoading={isLoading}
-        />
+        <div 
+          onClick={() => lowStockItems.length > 0 && setLowStockDialogOpen(true)}
+          className={lowStockItems.length > 0 ? 'cursor-pointer' : ''}
+        >
+          <KPICard
+            title="Low Stock Alerts"
+            value={lowStockItems.length.toString()}
+            change={lowStockItems.length > 0 ? "Click to view items" : "All stocked"}
+            changeType={lowStockItems.length > 0 ? "negative" : "positive"}
+            icon={AlertTriangle}
+            isLoading={isLoading}
+          />
+        </div>
       </div>
+
+      {/* Low Stock Dialog */}
+      <LowStockDialog
+        open={lowStockDialogOpen}
+        onOpenChange={setLowStockDialogOpen}
+        items={lowStockItems}
+      />
 
       {/* Content Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -358,7 +372,10 @@ const Dashboard = () => {
             </div>
           </div>
         </Card>
-        <Card className="bg-card border-border p-4">
+        <Card 
+          className={`bg-card border-border p-4 ${lowStockItems.length > 0 ? 'cursor-pointer hover:border-primary/30 transition-colors' : ''}`}
+          onClick={() => lowStockItems.length > 0 && setLowStockDialogOpen(true)}
+        >
           <div className="flex items-center gap-3">
             <AlertTriangle className={`w-8 h-8 ${lowStockItems.length > 0 ? 'text-destructive' : 'text-emerald-500'}`} />
             <div>
