@@ -13,15 +13,13 @@ const emailSchema = z.string().email('Please enter a valid email address');
 const passwordSchema = z.string().min(6, 'Password must be at least 6 characters');
 
 const Auth = () => {
-  const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [fullName, setFullName] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [errors, setErrors] = useState<{ email?: string; password?: string; fullName?: string }>({});
+  const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
   
-  const { signIn, signUp, user } = useAuth();
+  const { signIn, user } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -44,10 +42,6 @@ const Auth = () => {
       newErrors.password = passwordResult.error.errors[0].message;
     }
     
-    if (!isLogin && !fullName.trim()) {
-      newErrors.fullName = 'Full name is required';
-    }
-    
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -60,46 +54,21 @@ const Auth = () => {
     setIsLoading(true);
     
     try {
-      if (isLogin) {
-        const { error } = await signIn(email, password);
-        if (error) {
-          toast({
-            variant: 'destructive',
-            title: 'Login Failed',
-            description: error.message === 'Invalid login credentials' 
-              ? 'Invalid email or password. Please try again.'
-              : error.message,
-          });
-        } else {
-          toast({
-            title: 'Welcome back!',
-            description: 'You have successfully logged in.',
-          });
-          navigate('/dashboard');
-        }
+      const { error } = await signIn(email, password);
+      if (error) {
+        toast({
+          variant: 'destructive',
+          title: 'Login Failed',
+          description: error.message === 'Invalid login credentials' 
+            ? 'Invalid email or password. Please try again.'
+            : error.message,
+        });
       } else {
-        const { error } = await signUp(email, password, fullName);
-        if (error) {
-          if (error.message.includes('already registered')) {
-            toast({
-              variant: 'destructive',
-              title: 'Account Exists',
-              description: 'This email is already registered. Please log in instead.',
-            });
-          } else {
-            toast({
-              variant: 'destructive',
-              title: 'Signup Failed',
-              description: error.message,
-            });
-          }
-        } else {
-          toast({
-            title: 'Account Created!',
-            description: 'Welcome to Cherry Dining Lounge.',
-          });
-          navigate('/dashboard');
-        }
+        toast({
+          title: 'Welcome back!',
+          description: 'You have successfully logged in.',
+        });
+        navigate('/dashboard');
       }
     } finally {
       setIsLoading(false);
@@ -124,30 +93,13 @@ const Auth = () => {
               Cherry Dining Lounge
             </CardTitle>
             <CardDescription className="text-muted-foreground mt-2">
-              {isLogin ? 'Sign in to your account' : 'Create a new account'}
+              Staff Login
             </CardDescription>
           </div>
         </CardHeader>
         
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
-            {!isLogin && (
-              <div className="space-y-2">
-                <Label htmlFor="fullName" className="text-foreground">Full Name</Label>
-                <Input
-                  id="fullName"
-                  type="text"
-                  placeholder="Enter your full name"
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                  className="bg-input border-border text-foreground placeholder:text-muted-foreground focus:ring-primary"
-                />
-                {errors.fullName && (
-                  <p className="text-sm text-destructive">{errors.fullName}</p>
-                )}
-              </div>
-            )}
-            
             <div className="space-y-2">
               <Label htmlFor="email" className="text-foreground">Email</Label>
               <Input
@@ -195,29 +147,17 @@ const Auth = () => {
               {isLoading ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  {isLogin ? 'Signing in...' : 'Creating account...'}
+                  Signing in...
                 </>
               ) : (
-                isLogin ? 'Sign In' : 'Create Account'
+                'Sign In'
               )}
             </Button>
           </form>
           
-          <div className="mt-6 text-center">
-            <button
-              type="button"
-              onClick={() => {
-                setIsLogin(!isLogin);
-                setErrors({});
-              }}
-              className="text-sm text-muted-foreground hover:text-primary transition-colors"
-            >
-              {isLogin ? "Don't have an account? " : 'Already have an account? '}
-              <span className="text-primary font-medium">
-                {isLogin ? 'Sign up' : 'Sign in'}
-              </span>
-            </button>
-          </div>
+          <p className="mt-6 text-center text-sm text-muted-foreground">
+            Contact your administrator if you need an account.
+          </p>
         </CardContent>
       </Card>
     </div>
