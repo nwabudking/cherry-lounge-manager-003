@@ -23,7 +23,6 @@ const App = () => (
           <Routes>
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route path="/auth" element={<Auth />} />
-            <Route path="/migration" element={<Migration />} />
             {/* Protected Dashboard Routes */}
             <Route element={<DashboardLayout />}>
               <Route path="/dashboard" element={<Dashboard />} />
@@ -39,6 +38,7 @@ const App = () => (
               <Route path="/customers" element={<Customers />} />
               <Route path="/reports" element={<Reports />} />
               <Route path="/settings" element={<SettingsPage />} />
+              <Route path="/migration" element={<Migration />} />
             </Route>
             
             <Route path="*" element={<NotFound />} />
