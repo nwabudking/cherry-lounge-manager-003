@@ -2,3 +2,6 @@ project_id = "uqisnapayiofyiwpknag"
 
 [functions.import-data]
 verify_jwt = false
+
+[functions.import-staff]
+verify_jwt = false
