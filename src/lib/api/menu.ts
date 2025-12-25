@@ -1,4 +1,5 @@
 import apiClient from './client';
+import { supabase } from '@/integrations/supabase/client';
 
 export interface MenuCategory {
   id: string;
@@ -24,14 +25,37 @@ export interface MenuItem {
   updated_at: string;
 }
 
+// Check if we're in Lovable preview (no local backend)
+const isLovablePreview = (): boolean => {
+  return window.location.hostname.includes('lovableproject.com') || 
+         window.location.hostname.includes('lovable.app');
+};
+
 export const menuApi = {
   // Categories
   getCategories: async (): Promise<MenuCategory[]> => {
+    if (isLovablePreview()) {
+      const { data, error } = await supabase
+        .from('menu_categories')
+        .select('*')
+        .order('sort_order');
+      if (error) throw new Error(error.message);
+      return data || [];
+    }
     const response = await apiClient.get<MenuCategory[]>('/menu/categories');
     return response.data;
   },
 
   getActiveCategories: async (): Promise<MenuCategory[]> => {
+    if (isLovablePreview()) {
+      const { data, error } = await supabase
+        .from('menu_categories')
+        .select('*')
+        .eq('is_active', true)
+        .order('sort_order');
+      if (error) throw new Error(error.message);
+      return data || [];
+    }
     const response = await apiClient.get<MenuCategory[]>('/menu/categories', {
       params: { active: true },
     });
@@ -54,6 +78,15 @@ export const menuApi = {
 
   // Menu Items
   getMenuItems: async (categoryId?: string): Promise<MenuItem[]> => {
+    if (isLovablePreview()) {
+      let query = supabase.from('menu_items').select('*').order('name');
+      if (categoryId) {
+        query = query.eq('category_id', categoryId);
+      }
+      const { data, error } = await query;
+      if (error) throw new Error(error.message);
+      return data || [];
+    }
     const response = await apiClient.get<MenuItem[]>('/menu/items', {
       params: categoryId ? { categoryId } : undefined,
     });
@@ -61,6 +94,20 @@ export const menuApi = {
   },
 
   getActiveMenuItems: async (categoryId?: string): Promise<MenuItem[]> => {
+    if (isLovablePreview()) {
+      let query = supabase
+        .from('menu_items')
+        .select('*')
+        .eq('is_active', true)
+        .eq('is_available', true)
+        .order('name');
+      if (categoryId) {
+        query = query.eq('category_id', categoryId);
+      }
+      const { data, error } = await query;
+      if (error) throw new Error(error.message);
+      return data || [];
+    }
     const response = await apiClient.get<MenuItem[]>('/menu/items', {
       params: { active: true, ...(categoryId && { categoryId }) },
     });
