@@ -3,6 +3,12 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Plus, AlertCircle, AlertTriangle } from "lucide-react";
 
+interface InventoryInfo {
+  id: string;
+  current_stock: number;
+  min_stock_level: number;
+}
+
 interface MenuItem {
   id: string;
   name: string;
@@ -12,6 +18,7 @@ interface MenuItem {
   menu_categories?: { name: string } | null;
   track_inventory?: boolean | null;
   inventory_item_id?: string | null;
+  inventory_items?: InventoryInfo | null;
 }
 
 interface MenuGridProps {
@@ -28,10 +35,23 @@ const formatPrice = (price: number) => {
 };
 
 export const MenuGrid = ({ items, onAddToCart }: MenuGridProps) => {
-  // Stock tracking is handled by the backend now
   const getStockInfo = (item: MenuItem) => {
-    // For now, assume all items are in stock since the backend handles this
-    return { hasStock: true, stock: null, isLow: false };
+    // If no inventory tracking or no inventory link, assume in stock
+    if (!item.track_inventory || !item.inventory_items) {
+      return { hasStock: true, stock: null, isLow: false };
+    }
+
+    const { current_stock, min_stock_level } = item.inventory_items;
+    
+    if (current_stock <= 0) {
+      return { hasStock: false, stock: 0, isLow: false };
+    }
+    
+    if (current_stock <= min_stock_level) {
+      return { hasStock: true, stock: current_stock, isLow: true };
+    }
+    
+    return { hasStock: true, stock: current_stock, isLow: false };
   };
 
   return (
@@ -60,6 +80,12 @@ export const MenuGrid = ({ items, onAddToCart }: MenuGridProps) => {
                   <AlertTriangle className="h-3.5 w-3.5 text-white" />
                 </div>
               )}
+              {/* Out of stock corner indicator */}
+              {isOutOfStock && (
+                <div className="absolute -top-1 -right-1 h-6 w-6 rounded-full bg-destructive flex items-center justify-center shadow-md">
+                  <AlertCircle className="h-3.5 w-3.5 text-white" />
+                </div>
+              )}
               <CardContent className="p-4 flex flex-col h-full min-h-[120px]">
                 <div className="flex-1">
                   <p className={`font-medium text-sm leading-tight line-clamp-2 transition-colors ${
@@ -73,7 +99,7 @@ export const MenuGrid = ({ items, onAddToCart }: MenuGridProps) => {
                     </p>
                   )}
                   
-                  {/* Stock indicator */}
+                  {/* Stock indicator badges */}
                   {isOutOfStock && (
                     <Badge variant="destructive" className="mt-2 text-xs">
                       <AlertCircle className="h-3 w-3 mr-1" />

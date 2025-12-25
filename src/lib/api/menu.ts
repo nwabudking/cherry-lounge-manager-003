@@ -97,7 +97,14 @@ export const menuApi = {
     if (isLovablePreview()) {
       let query = supabase
         .from('menu_items')
-        .select('*')
+        .select(`
+          *,
+          inventory_items (
+            id,
+            current_stock,
+            min_stock_level
+          )
+        `)
         .eq('is_active', true)
         .eq('is_available', true)
         .order('name');
