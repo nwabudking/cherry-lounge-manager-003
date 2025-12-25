@@ -30,6 +30,7 @@ import {
   Cherry,
   DatabaseBackup,
   FileText,
+  Download,
 } from 'lucide-react';
 
 interface NavItem {
@@ -61,6 +62,7 @@ const managementNavItems: NavItem[] = [
   { title: 'Reports', url: '/reports', icon: BarChart3, roles: ['super_admin', 'manager', 'accountant'] },
   { title: 'Settings', url: '/settings', icon: Settings, roles: ['super_admin', 'manager'] },
   { title: 'Migration', url: '/migration', icon: DatabaseBackup, roles: ['super_admin'] },
+  { title: 'Data Import', url: '/data-import', icon: Download, roles: ['super_admin'] },
 ];
 
 export const AppSidebar = () => {
