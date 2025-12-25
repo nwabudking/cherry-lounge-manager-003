@@ -131,7 +131,65 @@ CREATE FUNCTION public.has_role(_user_id uuid, _role public.app_role) RETURNS bo
 $$;
 
 
+--
+-- Name: update_menu_availability_on_stock_change(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.update_menu_availability_on_stock_change() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+BEGIN
+  -- Update menu items linked to this inventory item
+  UPDATE public.menu_items
+  SET is_available = CASE 
+    WHEN NEW.current_stock <= 0 THEN false 
+    ELSE true 
+  END
+  WHERE inventory_item_id = NEW.id 
+    AND track_inventory = true;
+  
+  RETURN NEW;
+END;
+$$;
+
+
+--
+-- Name: update_updated_at_column(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.update_updated_at_column() RETURNS trigger
+    LANGUAGE plpgsql
+    SET search_path TO 'public'
+    AS $$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$$;
+
+
 SET default_table_access_method = heap;
+
+--
+-- Name: inventory_items; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.inventory_items (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    name text NOT NULL,
+    category text,
+    unit text DEFAULT 'pcs'::text NOT NULL,
+    current_stock numeric DEFAULT 0 NOT NULL,
+    min_stock_level numeric DEFAULT 10 NOT NULL,
+    cost_per_unit numeric,
+    supplier text,
+    is_active boolean DEFAULT true,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now(),
+    supplier_id uuid
+);
+
 
 --
 -- Name: menu_categories; Type: TABLE; Schema: public; Owner: -
@@ -161,7 +219,9 @@ CREATE TABLE public.menu_items (
     is_available boolean DEFAULT true,
     is_active boolean DEFAULT true,
     created_at timestamp with time zone DEFAULT now(),
-    updated_at timestamp with time zone DEFAULT now()
+    updated_at timestamp with time zone DEFAULT now(),
+    inventory_item_id uuid,
+    track_inventory boolean DEFAULT false
 );
 
 
@@ -239,6 +299,66 @@ CREATE TABLE public.profiles (
 
 
 --
+-- Name: restaurant_settings; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.restaurant_settings (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    name text DEFAULT 'Cherry Dining'::text NOT NULL,
+    tagline text DEFAULT '& Lounge'::text,
+    address text DEFAULT '123 Restaurant Street'::text,
+    city text DEFAULT 'Lagos'::text,
+    country text DEFAULT 'Nigeria'::text,
+    phone text DEFAULT '+234 800 000 0000'::text,
+    email text,
+    logo_url text,
+    currency text DEFAULT 'NGN'::text,
+    timezone text DEFAULT 'Africa/Lagos'::text,
+    receipt_footer text DEFAULT 'Thank you for dining with us!'::text,
+    receipt_show_logo boolean DEFAULT false,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now()
+);
+
+
+--
+-- Name: stock_movements; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.stock_movements (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    inventory_item_id uuid NOT NULL,
+    movement_type text NOT NULL,
+    quantity numeric NOT NULL,
+    previous_stock numeric NOT NULL,
+    new_stock numeric NOT NULL,
+    reference text,
+    notes text,
+    created_by uuid,
+    created_at timestamp with time zone DEFAULT now(),
+    CONSTRAINT stock_movements_movement_type_check CHECK ((movement_type = ANY (ARRAY['in'::text, 'out'::text, 'adjustment'::text])))
+);
+
+
+--
+-- Name: suppliers; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.suppliers (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    name text NOT NULL,
+    contact_person text,
+    email text,
+    phone text,
+    address text,
+    notes text,
+    is_active boolean DEFAULT true,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now()
+);
+
+
+--
 -- Name: user_roles; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -248,6 +368,14 @@ CREATE TABLE public.user_roles (
     role public.app_role DEFAULT 'cashier'::public.app_role NOT NULL,
     created_at timestamp with time zone DEFAULT now()
 );
+
+
+--
+-- Name: inventory_items inventory_items_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.inventory_items
+    ADD CONSTRAINT inventory_items_pkey PRIMARY KEY (id);
 
 
 --
@@ -307,6 +435,30 @@ ALTER TABLE ONLY public.profiles
 
 
 --
+-- Name: restaurant_settings restaurant_settings_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.restaurant_settings
+    ADD CONSTRAINT restaurant_settings_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: stock_movements stock_movements_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.stock_movements
+    ADD CONSTRAINT stock_movements_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: suppliers suppliers_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.suppliers
+    ADD CONSTRAINT suppliers_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: user_roles user_roles_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -323,11 +475,48 @@ ALTER TABLE ONLY public.user_roles
 
 
 --
+-- Name: idx_menu_items_inventory; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_menu_items_inventory ON public.menu_items USING btree (inventory_item_id) WHERE (inventory_item_id IS NOT NULL);
+
+
+--
+-- Name: inventory_items trigger_update_menu_availability; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trigger_update_menu_availability AFTER UPDATE OF current_stock ON public.inventory_items FOR EACH ROW EXECUTE FUNCTION public.update_menu_availability_on_stock_change();
+
+
+--
+-- Name: suppliers update_suppliers_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER update_suppliers_updated_at BEFORE UPDATE ON public.suppliers FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
+
+--
+-- Name: inventory_items inventory_items_supplier_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.inventory_items
+    ADD CONSTRAINT inventory_items_supplier_id_fkey FOREIGN KEY (supplier_id) REFERENCES public.suppliers(id);
+
+
+--
 -- Name: menu_items menu_items_category_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.menu_items
     ADD CONSTRAINT menu_items_category_id_fkey FOREIGN KEY (category_id) REFERENCES public.menu_categories(id) ON DELETE SET NULL;
+
+
+--
+-- Name: menu_items menu_items_inventory_item_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.menu_items
+    ADD CONSTRAINT menu_items_inventory_item_id_fkey FOREIGN KEY (inventory_item_id) REFERENCES public.inventory_items(id);
 
 
 --
@@ -379,6 +568,14 @@ ALTER TABLE ONLY public.profiles
 
 
 --
+-- Name: stock_movements stock_movements_inventory_item_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.stock_movements
+    ADD CONSTRAINT stock_movements_inventory_item_id_fkey FOREIGN KEY (inventory_item_id) REFERENCES public.inventory_items(id) ON DELETE CASCADE;
+
+
+--
 -- Name: user_roles user_roles_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -408,6 +605,13 @@ CREATE POLICY "Admins can update roles" ON public.user_roles FOR UPDATE TO authe
 
 
 --
+-- Name: restaurant_settings Admins can update settings; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "Admins can update settings" ON public.restaurant_settings FOR UPDATE USING ((public.has_role(auth.uid(), 'super_admin'::public.app_role) OR public.has_role(auth.uid(), 'manager'::public.app_role)));
+
+
+--
 -- Name: profiles Admins can view all profiles; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -433,6 +637,27 @@ CREATE POLICY "Anyone can view active categories" ON public.menu_categories FOR 
 --
 
 CREATE POLICY "Anyone can view active items" ON public.menu_items FOR SELECT USING ((is_active = true));
+
+
+--
+-- Name: stock_movements Managers and inventory officers can create movements; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "Managers and inventory officers can create movements" ON public.stock_movements FOR INSERT WITH CHECK ((public.has_role(auth.uid(), 'super_admin'::public.app_role) OR public.has_role(auth.uid(), 'manager'::public.app_role) OR public.has_role(auth.uid(), 'inventory_officer'::public.app_role)));
+
+
+--
+-- Name: inventory_items Managers and inventory officers can manage inventory; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "Managers and inventory officers can manage inventory" ON public.inventory_items USING ((public.has_role(auth.uid(), 'super_admin'::public.app_role) OR public.has_role(auth.uid(), 'manager'::public.app_role) OR public.has_role(auth.uid(), 'inventory_officer'::public.app_role)));
+
+
+--
+-- Name: suppliers Managers and inventory officers can manage suppliers; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "Managers and inventory officers can manage suppliers" ON public.suppliers USING ((public.has_role(auth.uid(), 'super_admin'::public.app_role) OR public.has_role(auth.uid(), 'manager'::public.app_role) OR public.has_role(auth.uid(), 'inventory_officer'::public.app_role)));
 
 
 --
@@ -485,6 +710,13 @@ CREATE POLICY "Staff can view all orders" ON public.orders FOR SELECT USING ((pu
 
 
 --
+-- Name: inventory_items Staff can view inventory; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "Staff can view inventory" ON public.inventory_items FOR SELECT USING ((public.has_role(auth.uid(), 'super_admin'::public.app_role) OR public.has_role(auth.uid(), 'manager'::public.app_role) OR public.has_role(auth.uid(), 'inventory_officer'::public.app_role) OR public.has_role(auth.uid(), 'bar_staff'::public.app_role) OR public.has_role(auth.uid(), 'kitchen_staff'::public.app_role) OR public.has_role(auth.uid(), 'cashier'::public.app_role)));
+
+
+--
 -- Name: order_items Staff can view order items; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -496,6 +728,34 @@ CREATE POLICY "Staff can view order items" ON public.order_items FOR SELECT USIN
 --
 
 CREATE POLICY "Staff can view payments" ON public.payments FOR SELECT USING ((public.has_role(auth.uid(), 'super_admin'::public.app_role) OR public.has_role(auth.uid(), 'manager'::public.app_role) OR public.has_role(auth.uid(), 'cashier'::public.app_role) OR public.has_role(auth.uid(), 'accountant'::public.app_role)));
+
+
+--
+-- Name: restaurant_settings Staff can view settings; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "Staff can view settings" ON public.restaurant_settings FOR SELECT USING ((public.has_role(auth.uid(), 'super_admin'::public.app_role) OR public.has_role(auth.uid(), 'manager'::public.app_role) OR public.has_role(auth.uid(), 'cashier'::public.app_role) OR public.has_role(auth.uid(), 'bar_staff'::public.app_role) OR public.has_role(auth.uid(), 'kitchen_staff'::public.app_role)));
+
+
+--
+-- Name: stock_movements Staff can view stock movements; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "Staff can view stock movements" ON public.stock_movements FOR SELECT USING ((public.has_role(auth.uid(), 'super_admin'::public.app_role) OR public.has_role(auth.uid(), 'manager'::public.app_role) OR public.has_role(auth.uid(), 'inventory_officer'::public.app_role)));
+
+
+--
+-- Name: suppliers Staff can view suppliers; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "Staff can view suppliers" ON public.suppliers FOR SELECT USING ((public.has_role(auth.uid(), 'super_admin'::public.app_role) OR public.has_role(auth.uid(), 'manager'::public.app_role) OR public.has_role(auth.uid(), 'inventory_officer'::public.app_role)));
+
+
+--
+-- Name: restaurant_settings Super admin can insert settings; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY "Super admin can insert settings" ON public.restaurant_settings FOR INSERT WITH CHECK (public.has_role(auth.uid(), 'super_admin'::public.app_role));
 
 
 --
@@ -525,6 +785,12 @@ CREATE POLICY "Users can view their own profile" ON public.profiles FOR SELECT T
 
 CREATE POLICY "Users can view their own roles" ON public.user_roles FOR SELECT TO authenticated USING ((auth.uid() = user_id));
 
+
+--
+-- Name: inventory_items; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.inventory_items ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: menu_categories; Type: ROW SECURITY; Schema: public; Owner: -
@@ -561,6 +827,24 @@ ALTER TABLE public.payments ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: restaurant_settings; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.restaurant_settings ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: stock_movements; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.stock_movements ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: suppliers; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.suppliers ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: user_roles; Type: ROW SECURITY; Schema: public; Owner: -
