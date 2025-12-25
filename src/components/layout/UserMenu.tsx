@@ -62,7 +62,10 @@ export const UserMenu = () => {
         <DropdownMenuContent align="end" className="w-56 bg-popover border-border">
           <DropdownMenuLabel className="text-foreground">My Account</DropdownMenuLabel>
           <DropdownMenuSeparator className="bg-border" />
-          <DropdownMenuItem className="text-foreground hover:bg-muted cursor-pointer">
+          <DropdownMenuItem 
+            onClick={() => navigate('/profile')}
+            className="text-foreground hover:bg-muted cursor-pointer"
+          >
             <User className="w-4 h-4 mr-2" />
             Profile
           </DropdownMenuItem>
