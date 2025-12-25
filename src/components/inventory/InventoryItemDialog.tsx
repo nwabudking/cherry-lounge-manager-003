@@ -15,7 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { InventoryItem } from "@/pages/Inventory";
+import type { InventoryItem, CategoryOption } from "@/pages/Inventory";
 import type { Supplier } from "./SupplierDialog";
 
 interface InventoryItemDialogProps {
@@ -24,7 +24,7 @@ interface InventoryItemDialogProps {
   onOpenChange: (open: boolean) => void;
   onSave: (data: Partial<InventoryItem>) => void;
   isSaving: boolean;
-  categories: string[];
+  categories: CategoryOption[];
   suppliers?: Supplier[];
 }
 
@@ -39,7 +39,7 @@ export const InventoryItemDialog = ({
 }: InventoryItemDialogProps) => {
   const [formData, setFormData] = useState({
     name: "",
-    category: "",
+    category_id: "",
     unit: "pcs",
     current_stock: 0,
     min_stock_level: 10,
@@ -52,7 +52,7 @@ export const InventoryItemDialog = ({
     if (item) {
       setFormData({
         name: item.name,
-        category: item.category || "",
+        category_id: item.category_id || "",
         unit: item.unit,
         current_stock: item.current_stock,
         min_stock_level: item.min_stock_level,
@@ -63,7 +63,7 @@ export const InventoryItemDialog = ({
     } else {
       setFormData({
         name: "",
-        category: "",
+        category_id: "",
         unit: "pcs",
         current_stock: 0,
         min_stock_level: 10,
@@ -77,10 +77,13 @@ export const InventoryItemDialog = ({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const selectedSupplier = suppliers.find(s => s.id === formData.supplier_id);
+    const selectedCategory = categories.find(c => c.id === formData.category_id);
+    
     onSave({
       ...(item?.id && { id: item.id }),
       name: formData.name,
-      category: formData.category || null,
+      category_id: formData.category_id || null,
+      category: selectedCategory?.name || null,
       unit: formData.unit,
       current_stock: formData.current_stock,
       min_stock_level: formData.min_stock_level,
@@ -110,18 +113,23 @@ export const InventoryItemDialog = ({
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="category">Category</Label>
-              <Input
-                id="category"
-                value={formData.category}
-                onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                list="categories"
-              />
-              <datalist id="categories">
-                {categories.map((cat) => (
-                  <option key={cat} value={cat} />
-                ))}
-              </datalist>
+              <Label>Category</Label>
+              <Select
+                value={formData.category_id}
+                onValueChange={(value) => setFormData({ ...formData, category_id: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select category" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">None</SelectItem>
+                  {categories.map((cat) => (
+                    <SelectItem key={cat.id} value={cat.id}>
+                      {cat.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="space-y-2">
