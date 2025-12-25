@@ -14,7 +14,13 @@ interface AuthContextType {
   refreshUser: () => Promise<void>;
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
+// Preserve context instance across Vite HMR updates to avoid "useAuth must be used within an AuthProvider"
+// when the consumer gets a new context instance but the provider is still using the old one.
+const AuthContext: React.Context<AuthContextType | undefined> =
+  ((globalThis as unknown as { __APP_AUTH_CONTEXT__?: React.Context<AuthContextType | undefined> }).__APP_AUTH_CONTEXT__ ??
+    createContext<AuthContextType | undefined>(undefined));
+
+(globalThis as unknown as { __APP_AUTH_CONTEXT__?: React.Context<AuthContextType | undefined> }).__APP_AUTH_CONTEXT__ = AuthContext;
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
