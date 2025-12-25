@@ -144,3 +144,33 @@ export function useDeleteMenuItem() {
     },
   });
 }
+
+export function useToggleMenuItemAvailability() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: ({ id, is_available }: { id: string; is_available: boolean }) => 
+      menuApi.updateMenuItem(id, { is_available }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: menuKeys.items() });
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || 'Failed to update availability');
+    },
+  });
+}
+
+export function useToggleCategoryActive() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: ({ id, is_active }: { id: string; is_active: boolean }) => 
+      menuApi.updateCategory(id, { is_active }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: menuKeys.categories() });
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || 'Failed to update category');
+    },
+  });
+}

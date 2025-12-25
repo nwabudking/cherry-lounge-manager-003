@@ -1,107 +1,50 @@
 import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
-import { useToast } from "@/hooks/use-toast";
 import { Plus, Pencil, Trash2, GripVertical, Check, X } from "lucide-react";
+import {
+  useMenuCategories,
+  useCreateCategory,
+  useUpdateCategory,
+  useDeleteCategory,
+  useToggleCategoryActive,
+} from "@/hooks/useMenu";
 
 interface Category {
   id: string;
   name: string;
-  sort_order: number;
+  sort_order: number | null;
   is_active: boolean;
 }
 
 export const CategoriesTab = () => {
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [newName, setNewName] = useState("");
   const [isAdding, setIsAdding] = useState(false);
 
-  const { data: categories = [], isLoading } = useQuery({
-    queryKey: ["menu-categories-all"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("menu_categories")
-        .select("*")
-        .order("sort_order");
-      if (error) throw error;
-      return data as Category[];
-    },
-  });
+  const { data: categories = [], isLoading } = useMenuCategories();
+  const createMutation = useCreateCategory();
+  const updateMutation = useUpdateCategory();
+  const deleteMutation = useDeleteCategory();
+  const toggleActiveMutation = useToggleCategoryActive();
 
-  const createMutation = useMutation({
-    mutationFn: async (name: string) => {
-      const maxOrder = Math.max(...categories.map((c) => c.sort_order), 0);
-      const { error } = await supabase
-        .from("menu_categories")
-        .insert({ name, sort_order: maxOrder + 1 });
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      toast({ title: "Category created" });
-      queryClient.invalidateQueries({ queryKey: ["menu-categories-all"] });
-      queryClient.invalidateQueries({ queryKey: ["menu-categories"] });
-      setNewName("");
-      setIsAdding(false);
-    },
-    onError: () => {
-      toast({ title: "Error creating category", variant: "destructive" });
-    },
-  });
-
-  const updateMutation = useMutation({
-    mutationFn: async ({ id, name }: { id: string; name: string }) => {
-      const { error } = await supabase
-        .from("menu_categories")
-        .update({ name })
-        .eq("id", id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      toast({ title: "Category updated" });
-      queryClient.invalidateQueries({ queryKey: ["menu-categories-all"] });
-      queryClient.invalidateQueries({ queryKey: ["menu-categories"] });
-      setEditingId(null);
-    },
-    onError: () => {
-      toast({ title: "Error updating category", variant: "destructive" });
-    },
-  });
-
-  const toggleActiveMutation = useMutation({
-    mutationFn: async ({ id, is_active }: { id: string; is_active: boolean }) => {
-      const { error } = await supabase
-        .from("menu_categories")
-        .update({ is_active })
-        .eq("id", id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["menu-categories-all"] });
-      queryClient.invalidateQueries({ queryKey: ["menu-categories"] });
-    },
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from("menu_categories").delete().eq("id", id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      toast({ title: "Category deleted" });
-      queryClient.invalidateQueries({ queryKey: ["menu-categories-all"] });
-      queryClient.invalidateQueries({ queryKey: ["menu-categories"] });
-    },
-    onError: () => {
-      toast({ title: "Error deleting category", variant: "destructive" });
-    },
-  });
+  const handleCreate = () => {
+    if (newName.trim()) {
+      const maxOrder = Math.max(...categories.map((c) => c.sort_order || 0), 0);
+      createMutation.mutate(
+        { name: newName.trim(), sort_order: maxOrder + 1 },
+        {
+          onSuccess: () => {
+            setNewName("");
+            setIsAdding(false);
+          },
+        }
+      );
+    }
+  };
 
   const startEdit = (category: Category) => {
     setEditingId(category.id);
@@ -115,7 +58,14 @@ export const CategoriesTab = () => {
 
   const saveEdit = () => {
     if (editingId && editName.trim()) {
-      updateMutation.mutate({ id: editingId, name: editName.trim() });
+      updateMutation.mutate(
+        { id: editingId, data: { name: editName.trim() } },
+        {
+          onSuccess: () => {
+            setEditingId(null);
+          },
+        }
+      );
     }
   };
 
@@ -145,7 +95,7 @@ export const CategoriesTab = () => {
                 autoFocus
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && newName.trim()) {
-                    createMutation.mutate(newName.trim());
+                    handleCreate();
                   }
                   if (e.key === "Escape") {
                     setIsAdding(false);
@@ -155,8 +105,8 @@ export const CategoriesTab = () => {
               />
               <Button
                 size="icon"
-                onClick={() => newName.trim() && createMutation.mutate(newName.trim())}
-                disabled={!newName.trim()}
+                onClick={handleCreate}
+                disabled={!newName.trim() || createMutation.isPending}
               >
                 <Check className="h-4 w-4" />
               </Button>
@@ -197,7 +147,11 @@ export const CategoriesTab = () => {
                           if (e.key === "Escape") cancelEdit();
                         }}
                       />
-                      <Button size="icon" onClick={saveEdit} disabled={!editName.trim()}>
+                      <Button 
+                        size="icon" 
+                        onClick={saveEdit} 
+                        disabled={!editName.trim() || updateMutation.isPending}
+                      >
                         <Check className="h-4 w-4" />
                       </Button>
                       <Button variant="ghost" size="icon" onClick={cancelEdit}>
