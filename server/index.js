@@ -15,6 +15,7 @@ import staffRoutes from './routes/staff.js';
 import suppliersRoutes from './routes/suppliers.js';
 import settingsRoutes from './routes/settings.js';
 import profilesRoutes from './routes/profiles.js';
+import migrationRoutes from './routes/migration.js';
 
 import { getPool } from './db/pool.js';
 import { verifyToken } from './middleware/auth.js';
@@ -82,6 +83,7 @@ app.use('/api/staff', staffRoutes);
 app.use('/api/suppliers', suppliersRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/profiles', profilesRoutes);
+app.use('/api/migration', migrationRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

@@ -16,9 +16,9 @@ const getJwtConfig = () => {
   }
 };
 
-export const generateToken = (payload) => {
+export const generateToken = (payload, expiresIn = null) => {
   const config = getJwtConfig();
-  return jwt.sign(payload, config.secret, { expiresIn: config.expiresIn });
+  return jwt.sign(payload, config.secret, { expiresIn: expiresIn || config.expiresIn });
 };
 
 export const verifyToken = (token) => {

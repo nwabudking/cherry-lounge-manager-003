@@ -370,7 +370,7 @@ export default function Migration() {
     setError(null);
 
     try {
-      const response = await apiClient.post("/migrate", payload);
+      const response = await apiClient.post("/migration/openpos", payload);
 
       if (response.data.success) {
         setResult(response.data.result);

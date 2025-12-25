@@ -33,30 +33,101 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ error: 'Invalid login credentials' });
     }
 
-    // Generate token
-    const token = generateToken({
+    const role = user.role || 'cashier';
+
+    // Generate tokens
+    const accessToken = generateToken({
       id: user.id,
       email: user.email,
-      role: user.role || 'cashier',
+      role: role,
     });
+
+    // Generate refresh token (longer expiry)
+    const refreshToken = generateToken({
+      id: user.id,
+      email: user.email,
+      type: 'refresh',
+    }, '7d');
 
     // Get profile
     const profiles = await query('SELECT * FROM profiles WHERE id = ?', [user.id]);
     const profile = profiles[0] || null;
 
     res.json({
-      token,
+      accessToken,
+      refreshToken,
       user: {
         id: user.id,
         email: user.email,
+        full_name: profile?.full_name || null,
+        avatar_url: profile?.avatar_url || null,
+        role: role,
       },
-      profile,
-      role: user.role || 'cashier',
     });
   } catch (error) {
     console.error('Login error:', error);
     res.status(500).json({ error: 'Login failed' });
   }
+});
+
+// Refresh token
+router.post('/refresh', async (req, res) => {
+  try {
+    const { refreshToken } = req.body;
+
+    if (!refreshToken) {
+      return res.status(400).json({ error: 'Refresh token required' });
+    }
+
+    // Verify refresh token
+    const { verifyToken } = await import('../middleware/auth.js');
+    const decoded = verifyToken(refreshToken);
+
+    if (decoded.type !== 'refresh') {
+      return res.status(401).json({ error: 'Invalid refresh token' });
+    }
+
+    // Get user to ensure they still exist
+    const users = await query(
+      'SELECT u.*, ur.role FROM users u LEFT JOIN user_roles ur ON u.id = ur.user_id WHERE u.id = ?',
+      [decoded.id]
+    );
+
+    if (users.length === 0) {
+      return res.status(401).json({ error: 'User not found' });
+    }
+
+    const user = users[0];
+    const role = user.role || 'cashier';
+
+    // Generate new tokens
+    const newAccessToken = generateToken({
+      id: user.id,
+      email: user.email,
+      role: role,
+    });
+
+    const newRefreshToken = generateToken({
+      id: user.id,
+      email: user.email,
+      type: 'refresh',
+    }, '7d');
+
+    res.json({
+      accessToken: newAccessToken,
+      refreshToken: newRefreshToken,
+    });
+  } catch (error) {
+    console.error('Refresh token error:', error);
+    res.status(401).json({ error: 'Invalid refresh token' });
+  }
+});
+
+// Logout
+router.post('/logout', authMiddleware, async (req, res) => {
+  // In a production app, you would invalidate the refresh token here
+  // For now, just acknowledge the logout
+  res.json({ success: true });
 });
 
 // Get current user
@@ -72,11 +143,17 @@ router.get('/me', authMiddleware, async (req, res) => {
     }
 
     const profiles = await query('SELECT * FROM profiles WHERE id = ?', [req.user.id]);
+    const profile = profiles[0] || null;
+    const role = users[0].role || 'cashier';
 
     res.json({
-      user: users[0],
-      profile: profiles[0] || null,
-      role: users[0].role || 'cashier',
+      user: {
+        id: users[0].id,
+        email: users[0].email,
+        full_name: profile?.full_name || null,
+        avatar_url: profile?.avatar_url || null,
+        role: role,
+      },
     });
   } catch (error) {
     console.error('Get user error:', error);
