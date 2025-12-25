@@ -6,11 +6,13 @@ import {
   useCreateStaff,
   useUpdateStaff,
   useDeleteStaff,
+  useResetStaffPassword,
 } from "@/hooks/useStaff";
 import { StaffHeader } from "@/components/staff/StaffHeader";
 import { StaffTable } from "@/components/staff/StaffTable";
 import { AddEditStaffDialog } from "@/components/staff/AddEditStaffDialog";
 import { DeleteStaffDialog } from "@/components/staff/DeleteStaffDialog";
+import { ResetPasswordDialog } from "@/components/staff/ResetPasswordDialog";
 
 export interface StaffMember {
   id: string;
@@ -28,6 +30,7 @@ const Staff = () => {
   const [selectedStaff, setSelectedStaff] = useState<StaffMember | null>(null);
   const [isAddEditDialogOpen, setIsAddEditDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isResetPasswordDialogOpen, setIsResetPasswordDialogOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState<string>("all");
@@ -36,6 +39,7 @@ const Staff = () => {
   const createStaffMutation = useCreateStaff();
   const updateStaffMutation = useUpdateStaff();
   const deleteStaffMutation = useDeleteStaff();
+  const resetPasswordMutation = useResetStaffPassword();
 
   // Transform staff data to match expected format
   const transformedStaff: StaffMember[] = staffMembers.map((s) => ({
@@ -75,6 +79,25 @@ const Staff = () => {
   const handleDeleteStaff = (staff: StaffMember) => {
     setSelectedStaff(staff);
     setIsDeleteDialogOpen(true);
+  };
+
+  const handleResetPassword = (staff: StaffMember) => {
+    setSelectedStaff(staff);
+    setIsResetPasswordDialogOpen(true);
+  };
+
+  const handleConfirmResetPassword = (newPassword: string) => {
+    if (selectedStaff) {
+      resetPasswordMutation.mutate(
+        { id: selectedStaff.id, newPassword },
+        {
+          onSuccess: () => {
+            setIsResetPasswordDialogOpen(false);
+            setSelectedStaff(null);
+          },
+        }
+      );
+    }
   };
 
   const handleSaveStaff = (data: {
@@ -145,6 +168,7 @@ const Staff = () => {
         isLoading={isLoading}
         onEdit={handleEditStaff}
         onDelete={handleDeleteStaff}
+        onResetPassword={handleResetPassword}
         canManage={canManageStaff}
         currentUserId={user?.id}
       />
@@ -164,6 +188,14 @@ const Staff = () => {
         onOpenChange={setIsDeleteDialogOpen}
         onConfirm={handleConfirmDelete}
         isDeleting={deleteStaffMutation.isPending}
+      />
+
+      <ResetPasswordDialog
+        staff={selectedStaff}
+        open={isResetPasswordDialogOpen}
+        onOpenChange={setIsResetPasswordDialogOpen}
+        onConfirm={handleConfirmResetPassword}
+        isResetting={resetPasswordMutation.isPending}
       />
     </div>
   );
