@@ -79,6 +79,7 @@ export type Database = {
       }
       menu_categories: {
         Row: {
+          category_type: string
           created_at: string | null
           id: string
           is_active: boolean | null
@@ -86,6 +87,7 @@ export type Database = {
           sort_order: number | null
         }
         Insert: {
+          category_type?: string
           created_at?: string | null
           id?: string
           is_active?: boolean | null
@@ -93,6 +95,7 @@ export type Database = {
           sort_order?: number | null
         }
         Update: {
+          category_type?: string
           created_at?: string | null
           id?: string
           is_active?: boolean | null
