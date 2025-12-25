@@ -17,6 +17,7 @@ export type Database = {
       inventory_items: {
         Row: {
           category: string | null
+          category_id: string | null
           cost_per_unit: number | null
           created_at: string | null
           current_stock: number
@@ -31,6 +32,7 @@ export type Database = {
         }
         Insert: {
           category?: string | null
+          category_id?: string | null
           cost_per_unit?: number | null
           created_at?: string | null
           current_stock?: number
@@ -45,6 +47,7 @@ export type Database = {
         }
         Update: {
           category?: string | null
+          category_id?: string | null
           cost_per_unit?: number | null
           created_at?: string | null
           current_stock?: number
@@ -58,6 +61,13 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "inventory_items_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "menu_categories"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "inventory_items_supplier_id_fkey"
             columns: ["supplier_id"]

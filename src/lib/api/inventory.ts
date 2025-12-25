@@ -5,6 +5,7 @@ export interface InventoryItem {
   id: string;
   name: string;
   category: string | null;
+  category_id: string | null;
   unit: string;
   current_stock: number;
   min_stock_level: number;
@@ -14,6 +15,11 @@ export interface InventoryItem {
   is_active: boolean;
   created_at: string;
   updated_at: string;
+  // Joined data
+  menu_categories?: {
+    id: string;
+    name: string;
+  } | null;
 }
 
 export interface StockMovement {
@@ -54,10 +60,13 @@ export const inventoryApi = {
     if (isLovablePreview()) {
       const { data, error } = await supabase
         .from('inventory_items')
-        .select('*')
+        .select('*, menu_categories(id, name)')
         .order('name');
       if (error) throw new Error(error.message);
-      return data || [];
+      return (data || []).map(item => ({
+        ...item,
+        category: item.menu_categories?.name || item.category,
+      }));
     }
     const response = await apiClient.get<InventoryItem[]>('/inventory/items');
     return response.data;
@@ -67,11 +76,14 @@ export const inventoryApi = {
     if (isLovablePreview()) {
       const { data, error } = await supabase
         .from('inventory_items')
-        .select('*')
+        .select('*, menu_categories(id, name)')
         .eq('is_active', true)
         .order('name');
       if (error) throw new Error(error.message);
-      return data || [];
+      return (data || []).map(item => ({
+        ...item,
+        category: item.menu_categories?.name || item.category,
+      }));
     }
     const response = await apiClient.get<InventoryItem[]>('/inventory/items', {
       params: { active: true },
@@ -83,11 +95,16 @@ export const inventoryApi = {
     if (isLovablePreview()) {
       const { data, error } = await supabase
         .from('inventory_items')
-        .select('*')
+        .select('*, menu_categories(id, name)')
         .eq('is_active', true)
         .order('current_stock');
       if (error) throw new Error(error.message);
-      return (data || []).filter(item => item.current_stock <= item.min_stock_level);
+      return (data || [])
+        .filter(item => item.current_stock <= item.min_stock_level)
+        .map(item => ({
+          ...item,
+          category: item.menu_categories?.name || item.category,
+        }));
     }
     const response = await apiClient.get<InventoryItem[]>('/inventory/items/low-stock');
     return response.data;

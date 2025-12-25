@@ -1,10 +1,9 @@
 import { useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   useInventoryItems,
-  useLowStockItems,
   useCreateInventoryItem,
   useUpdateInventoryItem,
   useDeleteInventoryItem,
@@ -16,23 +15,23 @@ import {
   useRemoveStock,
   useAdjustStock,
 } from "@/hooks/useInventory";
+import { useMenuCategories } from "@/hooks/useMenu";
 import { InventoryHeader } from "@/components/inventory/InventoryHeader";
 import { InventoryTable } from "@/components/inventory/InventoryTable";
 import { InventoryItemDialog } from "@/components/inventory/InventoryItemDialog";
 import { StockMovementDialog } from "@/components/inventory/StockMovementDialog";
 import { LowStockAlert } from "@/components/inventory/LowStockAlert";
-import { AddCategoryDialog } from "@/components/inventory/AddCategoryDialog";
 import { SupplierDialog, type Supplier } from "@/components/inventory/SupplierDialog";
 import { SuppliersTable } from "@/components/inventory/SuppliersTable";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Plus, Truck } from "lucide-react";
-import type { InventoryItem as ApiInventoryItem } from "@/lib/api/inventory";
 
 export interface InventoryItem {
   id: string;
   name: string;
   category: string | null;
+  category_id: string | null;
   unit: string;
   current_stock: number;
   min_stock_level: number;
@@ -42,9 +41,18 @@ export interface InventoryItem {
   is_active: boolean | null;
   created_at: string | null;
   updated_at: string | null;
+  menu_categories?: {
+    id: string;
+    name: string;
+  } | null;
 }
 
 export type MovementType = "in" | "out" | "adjustment";
+
+export interface CategoryOption {
+  id: string;
+  name: string;
+}
 
 const Inventory = () => {
   const { toast } = useToast();
@@ -56,15 +64,14 @@ const Inventory = () => {
   const [showLowStock, setShowLowStock] = useState(false);
   const [isItemDialogOpen, setIsItemDialogOpen] = useState(false);
   const [isMovementDialogOpen, setIsMovementDialogOpen] = useState(false);
-  const [isCategoryDialogOpen, setIsCategoryDialogOpen] = useState(false);
   const [isSupplierDialogOpen, setIsSupplierDialogOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
   const [movementItem, setMovementItem] = useState<InventoryItem | null>(null);
   const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
-  const [customCategories, setCustomCategories] = useState<string[]>([]);
 
   const { data: items = [], isLoading } = useInventoryItems();
   const { data: suppliers = [], isLoading: suppliersLoading } = useSuppliers();
+  const { data: menuCategories = [] } = useMenuCategories();
 
   const createItemMutation = useCreateInventoryItem();
   const updateItemMutation = useUpdateInventoryItem();
@@ -76,8 +83,9 @@ const Inventory = () => {
   const removeStockMutation = useRemoveStock();
   const adjustStockMutation = useAdjustStock();
 
-  const itemCategories = [...new Set(items.map((i) => i.category).filter(Boolean))] as string[];
-  const categories = [...new Set([...itemCategories, ...customCategories])];
+  // Get categories from menu_categories table (unified system)
+  const categories: CategoryOption[] = menuCategories.map(c => ({ id: c.id, name: c.name }));
+  const categoryNames = categories.map(c => c.name);
 
   const lowStockItems = items.filter((i) => i.current_stock <= i.min_stock_level);
 
@@ -125,11 +133,6 @@ const Inventory = () => {
         },
       });
     }
-  };
-
-  const handleAddCategory = (category: string) => {
-    setCustomCategories((prev) => [...prev, category]);
-    toast({ title: "Category Added", description: `"${category}" is now available for items.` });
   };
 
   const handleAddSupplier = () => {
@@ -224,13 +227,12 @@ const Inventory = () => {
             totalItems={items.length}
             lowStockCount={lowStockItems.length}
             onAddItem={handleAddItem}
-            onAddCategory={() => setIsCategoryDialogOpen(true)}
             canManage={canManage}
             searchQuery={searchQuery}
             setSearchQuery={setSearchQuery}
             categoryFilter={categoryFilter}
             setCategoryFilter={setCategoryFilter}
-            categories={categories}
+            categories={categoryNames}
             showLowStock={showLowStock}
             setShowLowStock={setShowLowStock}
           />
@@ -288,13 +290,6 @@ const Inventory = () => {
         isSaving={createItemMutation.isPending || updateItemMutation.isPending}
         categories={categories}
         suppliers={suppliers}
-      />
-
-      <AddCategoryDialog
-        open={isCategoryDialogOpen}
-        onOpenChange={setIsCategoryDialogOpen}
-        existingCategories={categories}
-        onAddCategory={handleAddCategory}
       />
 
       <SupplierDialog
