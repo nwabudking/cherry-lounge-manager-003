@@ -158,7 +158,7 @@ export const ordersApi = {
           service_charge: serviceCharge,
           vat_amount: vatAmount,
           total_amount: totalAmount,
-          status: 'completed',
+          status: 'pending',
           created_by: user?.id || null,
         }])
         .select()

@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
 import { ordersApi } from "@/lib/api/orders";
-import { Wine, Clock, CheckCircle2, RefreshCw } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { Wine, Clock, CheckCircle2, RefreshCw, Flame } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
 const orderTypeLabels: Record<string, string> = {
@@ -21,21 +22,61 @@ const Bar = () => {
   const queryClient = useQueryClient();
   const [filter, setFilter] = useState<"pending" | "preparing" | "all">("pending");
 
-  // Fetch bar orders (drinks category orders or bar_only type, active statuses only)
-  const { data: orders = [], isLoading } = useQuery({
-    queryKey: ["bar-orders", filter],
+  // Fetch drink category IDs
+  const { data: drinkCategoryIds = [] } = useQuery({
+    queryKey: ["drink-categories"],
     queryFn: async () => {
-      // Get all orders and filter for bar-related and active statuses
+      const { data, error } = await supabase
+        .from("menu_categories")
+        .select("id")
+        .eq("category_type", "drink");
+      if (error) throw error;
+      return data.map((c) => c.id);
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // Fetch menu items to check which items belong to drink categories
+  const { data: menuItemCategories = {} } = useQuery({
+    queryKey: ["menu-item-categories"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("menu_items")
+        .select("id, category_id");
+      if (error) throw error;
+      const map: Record<string, string | null> = {};
+      data.forEach((item) => {
+        map[item.id] = item.category_id;
+      });
+      return map;
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // Fetch bar orders (only active orders with drink items)
+  const { data: orders = [], isLoading } = useQuery({
+    queryKey: ["bar-orders", filter, drinkCategoryIds, menuItemCategories],
+    queryFn: async () => {
       const allOrders = await ordersApi.getOrders();
       const activeStatuses = filter === "all" 
         ? ["pending", "preparing", "ready"] 
         : [filter];
-      // Show bar_only orders and orders that contain drink items
-      return allOrders.filter(
-        (o) => activeStatuses.includes(o.status)
-      );
+      
+      // Filter orders that have at least one drink item
+      return allOrders.filter((order) => {
+        if (!activeStatuses.includes(order.status)) return false;
+        
+        // Check if order has any drink items
+        const hasDrinkItems = order.items?.some((item) => {
+          const categoryId = menuItemCategories[item.menu_item_id || ""];
+          return categoryId && drinkCategoryIds.includes(categoryId);
+        });
+        
+        return hasDrinkItems;
+      });
     },
-    refetchInterval: 10000, // Refresh every 10 seconds
+    refetchInterval: 10000,
+    enabled: drinkCategoryIds.length >= 0 && Object.keys(menuItemCategories).length >= 0,
   });
 
   const updateStatusMutation = useMutation({
@@ -62,6 +103,13 @@ const Bar = () => {
       default:
         return "bg-muted text-muted-foreground";
     }
+  };
+
+  const getOrderUrgency = (createdAt: string) => {
+    const minutes = (Date.now() - new Date(createdAt).getTime()) / 60000;
+    if (minutes > 10) return "urgent";
+    if (minutes > 5) return "warning";
+    return "normal";
   };
 
   const getNextStatus = (currentStatus: string) => {
@@ -123,6 +171,42 @@ const Bar = () => {
         </div>
       </div>
 
+      {/* Stats */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <Card className="bg-amber-500/10 border-amber-500/20">
+          <CardContent className="p-4">
+            <div className="text-2xl font-bold text-amber-500">
+              {orders.filter((o) => o.status === "pending").length}
+            </div>
+            <p className="text-sm text-muted-foreground">Pending</p>
+          </CardContent>
+        </Card>
+        <Card className="bg-blue-500/10 border-blue-500/20">
+          <CardContent className="p-4">
+            <div className="text-2xl font-bold text-blue-500">
+              {orders.filter((o) => o.status === "preparing").length}
+            </div>
+            <p className="text-sm text-muted-foreground">Preparing</p>
+          </CardContent>
+        </Card>
+        <Card className="bg-emerald-500/10 border-emerald-500/20">
+          <CardContent className="p-4">
+            <div className="text-2xl font-bold text-emerald-500">
+              {orders.filter((o) => o.status === "ready").length}
+            </div>
+            <p className="text-sm text-muted-foreground">Ready</p>
+          </CardContent>
+        </Card>
+        <Card className="bg-red-500/10 border-red-500/20">
+          <CardContent className="p-4">
+            <div className="text-2xl font-bold text-red-500">
+              {orders.filter((o) => getOrderUrgency(o.created_at!) === "urgent").length}
+            </div>
+            <p className="text-sm text-muted-foreground">Urgent (&gt;10min)</p>
+          </CardContent>
+        </Card>
+      </div>
+
       {/* Orders Grid */}
       {isLoading ? (
         <div className="flex items-center justify-center py-12">
@@ -138,75 +222,99 @@ const Bar = () => {
         </Card>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {orders.map((order) => (
-            <Card key={order.id} className="flex flex-col">
-              <CardHeader className="pb-3">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <CardTitle className="text-lg">{order.order_number}</CardTitle>
-                    <div className="flex items-center gap-2 mt-1 text-sm text-muted-foreground">
-                      <Clock className="h-3 w-3" />
-                      {formatDistanceToNow(new Date(order.created_at!), {
-                        addSuffix: true,
-                      })}
-                    </div>
-                  </div>
-                  <Badge className={getStatusColor(order.status)}>{order.status}</Badge>
-                </div>
-                <div className="flex flex-wrap gap-2 mt-2">
-                  <Badge variant="outline" className="text-xs">
-                    {orderTypeLabels[order.order_type] || order.order_type}
-                  </Badge>
-                  {order.table_number && (
-                    <Badge variant="secondary" className="text-xs">
-                      Table {order.table_number}
-                    </Badge>
-                  )}
-                </div>
-              </CardHeader>
-
-              <ScrollArea className="flex-1 max-h-48">
-                <CardContent className="pt-0 space-y-2">
-                  {order.items?.map((item) => (
-                    <div
-                      key={item.id}
-                      className="flex items-start gap-2 p-2 rounded bg-muted/50"
-                    >
-                      <span className="font-bold text-primary min-w-[24px]">
-                        {item.quantity}x
-                      </span>
-                      <div className="flex-1">
-                        <p className="font-medium text-sm">{item.item_name}</p>
-                        {item.notes && (
-                          <p className="text-xs text-muted-foreground mt-1">
-                            Note: {item.notes}
-                          </p>
+          {orders.map((order) => {
+            const urgency = getOrderUrgency(order.created_at!);
+            // Filter to show only drink items in this order
+            const drinkItems = order.items?.filter((item) => {
+              const categoryId = menuItemCategories[item.menu_item_id || ""];
+              return categoryId && drinkCategoryIds.includes(categoryId);
+            });
+            
+            return (
+              <Card
+                key={order.id}
+                className={`flex flex-col ${
+                  urgency === "urgent"
+                    ? "border-red-500 ring-2 ring-red-500/20"
+                    : urgency === "warning"
+                    ? "border-amber-500"
+                    : ""
+                }`}
+              >
+                <CardHeader className="pb-3">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <CardTitle className="text-lg flex items-center gap-2">
+                        {order.order_number}
+                        {urgency === "urgent" && (
+                          <Flame className="h-4 w-4 text-red-500 animate-pulse" />
                         )}
+                      </CardTitle>
+                      <div className="flex items-center gap-2 mt-1 text-sm text-muted-foreground">
+                        <Clock className="h-3 w-3" />
+                        {formatDistanceToNow(new Date(order.created_at!), {
+                          addSuffix: true,
+                        })}
                       </div>
                     </div>
-                  ))}
-                </CardContent>
-              </ScrollArea>
+                    <Badge className={getStatusColor(order.status)}>{order.status}</Badge>
+                  </div>
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    <Badge variant="outline" className="text-xs">
+                      {orderTypeLabels[order.order_type] || order.order_type}
+                    </Badge>
+                    {order.table_number && (
+                      <Badge variant="secondary" className="text-xs">
+                        Table {order.table_number}
+                      </Badge>
+                    )}
+                  </div>
+                </CardHeader>
 
-              {getNextStatus(order.status) && (
-                <div className="p-4 pt-0 mt-auto">
-                  <Button
-                    className="w-full"
-                    onClick={() =>
-                      updateStatusMutation.mutate({
-                        orderId: order.id,
-                        status: getNextStatus(order.status)!,
-                      })
-                    }
-                    disabled={updateStatusMutation.isPending}
-                  >
-                    <CheckCircle2 className="h-4 w-4 mr-2" />
-                    {getNextStatusLabel(order.status)}
-                  </Button>
-                </div>
-              )}
-            </Card>
-          ))}
+                <ScrollArea className="flex-1 max-h-48">
+                  <CardContent className="pt-0 space-y-2">
+                    {drinkItems?.map((item) => (
+                      <div
+                        key={item.id}
+                        className="flex items-start gap-2 p-2 rounded bg-muted/50"
+                      >
+                        <span className="font-bold text-primary min-w-[24px]">
+                          {item.quantity}x
+                        </span>
+                        <div className="flex-1">
+                          <p className="font-medium text-sm">{item.item_name}</p>
+                          {item.notes && (
+                            <p className="text-xs text-muted-foreground mt-1">
+                              Note: {item.notes}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </CardContent>
+                </ScrollArea>
+
+                {getNextStatus(order.status) && (
+                  <div className="p-4 pt-0 mt-auto">
+                    <Button
+                      className="w-full"
+                      variant={urgency === "urgent" ? "destructive" : "default"}
+                      onClick={() =>
+                        updateStatusMutation.mutate({
+                          orderId: order.id,
+                          status: getNextStatus(order.status)!,
+                        })
+                      }
+                      disabled={updateStatusMutation.isPending}
+                    >
+                      <CheckCircle2 className="h-4 w-4 mr-2" />
+                      {getNextStatusLabel(order.status)}
+                    </Button>
+                  </div>
+                )}
+              </Card>
+            );
+          })}
         </div>
       )}
     </div>

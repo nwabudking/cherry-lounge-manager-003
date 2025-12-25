@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
 import { ordersApi, Order } from "@/lib/api/orders";
-import { menuApi } from "@/lib/api/menu";
+import { supabase } from "@/integrations/supabase/client";
 import { ChefHat, Clock, CheckCircle2, RefreshCw, Flame } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
@@ -22,21 +22,63 @@ const Kitchen = () => {
   const queryClient = useQueryClient();
   const [filter, setFilter] = useState<"pending" | "preparing" | "all">("pending");
 
-  // Fetch kitchen orders (only active orders: pending, preparing, ready)
-  const { data: orders = [], isLoading } = useQuery({
-    queryKey: ["kitchen-orders", filter],
+  // Fetch drink category IDs to filter out drink orders
+  const { data: drinkCategoryIds = [] } = useQuery({
+    queryKey: ["drink-categories"],
     queryFn: async () => {
-      // Get all orders and filter client-side for active statuses
+      const { data, error } = await supabase
+        .from("menu_categories")
+        .select("id")
+        .eq("category_type", "drink");
+      if (error) throw error;
+      return data.map((c) => c.id);
+    },
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+  });
+
+  // Fetch menu items to check which items belong to drink categories
+  const { data: menuItemCategories = {} } = useQuery({
+    queryKey: ["menu-item-categories"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("menu_items")
+        .select("id, category_id");
+      if (error) throw error;
+      const map: Record<string, string | null> = {};
+      data.forEach((item) => {
+        map[item.id] = item.category_id;
+      });
+      return map;
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // Fetch kitchen orders (only active orders with food items)
+  const { data: orders = [], isLoading } = useQuery({
+    queryKey: ["kitchen-orders", filter, drinkCategoryIds, menuItemCategories],
+    queryFn: async () => {
       const allOrders = await ordersApi.getOrders();
-      // Filter for kitchen orders only (not bar_only) and active statuses
       const activeStatuses = filter === "all" 
         ? ["pending", "preparing", "ready"] 
         : [filter];
-      return allOrders.filter(
-        (o) => o.order_type !== "bar_only" && activeStatuses.includes(o.status)
-      );
+      
+      // Filter orders that have at least one food item (non-drink category)
+      return allOrders.filter((order) => {
+        // Must be an active status
+        if (!activeStatuses.includes(order.status)) return false;
+        
+        // Check if order has any food items
+        const hasFoodItems = order.items?.some((item) => {
+          const categoryId = menuItemCategories[item.menu_item_id || ""];
+          // If no category or category is not a drink category, it's food
+          return !categoryId || !drinkCategoryIds.includes(categoryId);
+        });
+        
+        return hasFoodItems;
+      });
     },
-    refetchInterval: 10000, // Refresh every 10 seconds
+    refetchInterval: 10000,
+    enabled: drinkCategoryIds.length >= 0 && Object.keys(menuItemCategories).length >= 0,
   });
 
   const updateStatusMutation = useMutation({
@@ -184,6 +226,12 @@ const Kitchen = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {orders.map((order) => {
             const urgency = getOrderUrgency(order.created_at!);
+            // Filter to show only food items in this order
+            const foodItems = order.items?.filter((item) => {
+              const categoryId = menuItemCategories[item.menu_item_id || ""];
+              return !categoryId || !drinkCategoryIds.includes(categoryId);
+            });
+            
             return (
               <Card
                 key={order.id}
@@ -227,7 +275,7 @@ const Kitchen = () => {
 
                 <ScrollArea className="flex-1 max-h-48">
                   <CardContent className="pt-0 space-y-2">
-                    {order.items?.map((item) => (
+                    {foodItems?.map((item) => (
                       <div
                         key={item.id}
                         className="flex items-start gap-2 p-2 rounded bg-muted/50"
