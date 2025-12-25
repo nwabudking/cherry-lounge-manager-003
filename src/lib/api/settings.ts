@@ -1,3 +1,4 @@
+import apiClient from './client';
 import { supabase } from '@/integrations/supabase/client';
 
 export interface RestaurantSettings {
@@ -18,16 +19,24 @@ export interface RestaurantSettings {
   updated_at: string;
 }
 
+// Check if we're in Lovable preview (no local backend)
+const isLovablePreview = (): boolean => {
+  return window.location.hostname.includes('lovableproject.com') || 
+         window.location.hostname.includes('lovable.app');
+};
+
 export const settingsApi = {
   getSettings: async (): Promise<RestaurantSettings> => {
-    const { data, error } = await supabase
-      .from('restaurant_settings')
-      .select('*')
-      .single();
-    
-    if (error) {
+    if (isLovablePreview()) {
+      const { data, error } = await supabase
+        .from('restaurant_settings')
+        .select('*')
+        .maybeSingle();
+      
+      if (error) throw new Error(error.message);
+      
       // If no settings exist, return default
-      if (error.code === 'PGRST116') {
+      if (!data) {
         return {
           id: '',
           name: 'Cherry Dining',
@@ -46,63 +55,78 @@ export const settingsApi = {
           updated_at: new Date().toISOString(),
         };
       }
-      throw new Error(error.message);
+      
+      return {
+        ...data,
+        currency: data.currency || 'NGN',
+        timezone: data.timezone || 'Africa/Lagos',
+        receipt_show_logo: data.receipt_show_logo || false,
+      };
     }
-    
-    return {
-      ...data,
-      currency: data.currency || 'NGN',
-      timezone: data.timezone || 'Africa/Lagos',
-      receipt_show_logo: data.receipt_show_logo || false,
-    };
+    const response = await apiClient.get<RestaurantSettings>('/settings');
+    return response.data;
   },
 
   updateSettings: async (settingsData: Partial<RestaurantSettings>): Promise<RestaurantSettings> => {
-    // First check if settings exist
-    const { data: existing } = await supabase
-      .from('restaurant_settings')
-      .select('id')
-      .single();
-    
-    if (existing) {
-      // Update existing
-      const { data, error } = await supabase
+    if (isLovablePreview()) {
+      // First check if settings exist
+      const { data: existing } = await supabase
         .from('restaurant_settings')
-        .update(settingsData)
-        .eq('id', existing.id)
-        .select()
-        .single();
+        .select('id')
+        .maybeSingle();
       
-      if (error) throw new Error(error.message);
-      return data;
-    } else {
-      // Create new
-      const { data, error } = await supabase
-        .from('restaurant_settings')
-        .insert(settingsData)
-        .select()
-        .single();
-      
-      if (error) throw new Error(error.message);
-      return data;
+      if (existing) {
+        // Update existing
+        const { data, error } = await supabase
+          .from('restaurant_settings')
+          .update(settingsData)
+          .eq('id', existing.id)
+          .select()
+          .single();
+        
+        if (error) throw new Error(error.message);
+        return data;
+      } else {
+        // Create new
+        const { data, error } = await supabase
+          .from('restaurant_settings')
+          .insert([settingsData as any])
+          .select()
+          .single();
+        
+        if (error) throw new Error(error.message);
+        return data;
+      }
     }
+    const response = await apiClient.put<RestaurantSettings>('/settings', settingsData);
+    return response.data;
   },
 
   uploadLogo: async (file: File): Promise<{ url: string }> => {
-    const fileExt = file.name.split('.').pop();
-    const fileName = `logo-${Date.now()}.${fileExt}`;
-    const filePath = `logos/${fileName}`;
-    
-    const { error: uploadError } = await supabase.storage
-      .from('menu-images')
-      .upload(filePath, file);
-    
-    if (uploadError) throw new Error(uploadError.message);
-    
-    const { data: { publicUrl } } = supabase.storage
-      .from('menu-images')
-      .getPublicUrl(filePath);
-    
-    return { url: publicUrl };
+    if (isLovablePreview()) {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `logo-${Date.now()}.${fileExt}`;
+      const filePath = `logos/${fileName}`;
+      
+      const { error: uploadError } = await supabase.storage
+        .from('menu-images')
+        .upload(filePath, file);
+      
+      if (uploadError) throw new Error(uploadError.message);
+      
+      const { data: { publicUrl } } = supabase.storage
+        .from('menu-images')
+        .getPublicUrl(filePath);
+      
+      return { url: publicUrl };
+    }
+    const formData = new FormData();
+    formData.append('logo', file);
+    const response = await apiClient.post<{ url: string }>('/settings/logo', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
   },
 };
