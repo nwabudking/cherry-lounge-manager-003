@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { format, startOfDay, endOfDay } from "date-fns";
 import { CalendarIcon, Receipt, Users, CreditCard, Banknote, Smartphone, Building } from "lucide-react";
@@ -30,6 +29,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ordersApi } from "@/lib/api/orders";
+import { staffApi } from "@/lib/api/staff";
 
 const formatPrice = (price: number) => {
   return new Intl.NumberFormat("en-NG", {
@@ -60,8 +61,8 @@ interface OrderWithDetails {
   total_amount: number;
   created_at: string;
   created_by: string | null;
-  order_items: { item_name: string; quantity: number; total_price: number }[];
-  payments: { payment_method: string; amount: number }[];
+  items?: { item_name: string; quantity: number; total_price: number }[];
+  payments?: { payment_method: string; amount: number }[];
 }
 
 interface CashierProfile {
@@ -81,10 +82,7 @@ const EODReport = () => {
   const { data: cashiers = [] } = useQuery({
     queryKey: ["cashiers-list"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("id, full_name, email");
-      if (error) throw error;
+      const data = await staffApi.getProfiles();
       return data as CashierProfile[];
     },
     enabled: isManager,
@@ -97,28 +95,11 @@ const EODReport = () => {
       const start = startOfDay(selectedDate).toISOString();
       const end = endOfDay(selectedDate).toISOString();
       
-      let query = supabase
-        .from("orders")
-        .select(`
-          id, order_number, order_type, total_amount, created_at, created_by,
-          order_items(item_name, quantity, total_price),
-          payments(payment_method, amount)
-        `)
-        .gte("created_at", start)
-        .lte("created_at", end)
-        .eq("status", "completed")
-        .order("created_at", { ascending: true });
+      const cashierId = selectedCashier !== "all" 
+        ? selectedCashier 
+        : (!isManager ? user?.id : undefined);
 
-      // Filter by cashier
-      if (selectedCashier !== "all") {
-        query = query.eq("created_by", selectedCashier);
-      } else if (!isManager) {
-        // Non-managers can only see their own
-        query = query.eq("created_by", user?.id);
-      }
-
-      const { data, error } = await query;
-      if (error) throw error;
+      const data = await ordersApi.getCompletedOrdersByDate(start, end, cashierId);
       return data as OrderWithDetails[];
     },
   });
@@ -128,13 +109,13 @@ const EODReport = () => {
     totalSales: orders.reduce((sum, o) => sum + o.total_amount, 0),
     transactionCount: orders.length,
     paymentBreakdown: orders.reduce((acc, order) => {
-      order.payments.forEach((p) => {
+      (order.payments || []).forEach((p) => {
         acc[p.payment_method] = (acc[p.payment_method] || 0) + p.amount;
       });
       return acc;
     }, {} as Record<string, number>),
     itemsSold: orders.reduce(
-      (sum, o) => sum + o.order_items.reduce((s, i) => s + i.quantity, 0),
+      (sum, o) => sum + (o.items || []).reduce((s, i) => s + i.quantity, 0),
       0
     ),
   };
@@ -364,21 +345,21 @@ const EODReport = () => {
                       </TableCell>
                       <TableCell>
                         <div className="max-w-[200px]">
-                          {order.order_items.slice(0, 2).map((item, i) => (
+                          {(order.items || []).slice(0, 2).map((item, i) => (
                             <span key={i} className="text-sm">
                               {item.quantity}x {item.item_name}
-                              {i < Math.min(order.order_items.length, 2) - 1 && ", "}
+                              {i < Math.min((order.items || []).length, 2) - 1 && ", "}
                             </span>
                           ))}
-                          {order.order_items.length > 2 && (
+                          {(order.items || []).length > 2 && (
                             <span className="text-sm text-muted-foreground">
-                              {" "}+{order.order_items.length - 2} more
+                              {" "}+{(order.items || []).length - 2} more
                             </span>
                           )}
                         </div>
                       </TableCell>
                       <TableCell>
-                        {order.payments.map((p) => paymentLabels[p.payment_method] || p.payment_method).join(", ")}
+                        {(order.payments || []).map((p) => paymentLabels[p.payment_method] || p.payment_method).join(", ")}
                       </TableCell>
                       {isManager && (
                         <TableCell>{getCashierName(order.created_by)}</TableCell>

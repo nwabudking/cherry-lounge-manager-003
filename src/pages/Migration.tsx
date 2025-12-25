@@ -1,6 +1,5 @@
 import { useState, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
@@ -8,6 +7,7 @@ import { Loader2, Database, CheckCircle2, AlertCircle, Upload, FileJson, FileCod
 import { Navigate } from "react-router-dom";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import apiClient from "@/lib/api/client";
 
 interface MigrationResult {
   categories: number;
@@ -60,19 +60,16 @@ interface OrderItemData {
 function parseItemsFromSQL(sql: string): ItemData[] {
   const items: ItemData[] = [];
   
-  // Match INSERT INTO `ospos_items` statements
   const insertPattern = /INSERT\s+INTO\s+`?ospos_items`?\s*\([^)]+\)\s*VALUES\s*((?:\([^)]+\),?\s*)+)/gi;
   const matches = sql.matchAll(insertPattern);
   
   for (const match of matches) {
     const valuesStr = match[1];
-    // Split individual value tuples
     const tuplePattern = /\(([^)]+)\)/g;
     const tuples = valuesStr.matchAll(tuplePattern);
     
     for (const tuple of tuples) {
       const values = parseCSVValues(tuple[1]);
-      // ospos_items columns: name, category, supplier_id, item_number, description, cost_price, unit_price, ...
       if (values.length >= 7) {
         const item: ItemData = {
           item_id: items.length + 1,
@@ -96,7 +93,6 @@ function parseItemsFromSQL(sql: string): ItemData[] {
 function parseEmployeesFromSQL(sql: string): EmployeeData[] {
   const employees: EmployeeData[] = [];
   
-  // Match INSERT INTO `ospos_employees` or ospos_people statements
   const insertPattern = /INSERT\s+INTO\s+`?ospos_employees`?\s*\([^)]+\)\s*VALUES\s*((?:\([^)]+\),?\s*)+)/gi;
   const matches = sql.matchAll(insertPattern);
   
@@ -107,7 +103,6 @@ function parseEmployeesFromSQL(sql: string): EmployeeData[] {
     
     for (const tuple of tuples) {
       const values = parseCSVValues(tuple[1]);
-      // ospos_employees columns: person_id, first_name, last_name, email, ...
       if (values.length >= 4) {
         const employee: EmployeeData = {
           person_id: parseInt(values[0]) || employees.length + 1,
@@ -123,7 +118,6 @@ function parseEmployeesFromSQL(sql: string): EmployeeData[] {
     }
   }
   
-  // Also try ospos_people table which some OpenPOS versions use
   const peoplePattern = /INSERT\s+INTO\s+`?ospos_people`?\s*\([^)]+\)\s*VALUES\s*((?:\([^)]+\),?\s*)+)/gi;
   const peopleMatches = sql.matchAll(peoplePattern);
   
@@ -142,7 +136,6 @@ function parseEmployeesFromSQL(sql: string): EmployeeData[] {
           email: cleanSQLString(values[3]),
           username: cleanSQLString(values[4] || values[3]),
         };
-        // Avoid duplicates
         if (employee.email && employee.email.includes('@') && 
             !employees.some(e => e.email === employee.email)) {
           employees.push(employee);
@@ -159,7 +152,6 @@ function parseOrdersFromSQL(sql: string): OrderData[] {
   const orders: OrderData[] = [];
   const orderItemsMap = new Map<number, OrderItemData[]>();
   
-  // First parse sales_items to build the items map
   const itemsPattern = /INSERT\s+INTO\s+`?ospos_sales_items`?\s*\([^)]+\)\s*VALUES\s*((?:\([^)]+\),?\s*)+)/gi;
   const itemsMatches = sql.matchAll(itemsPattern);
   
@@ -170,7 +162,6 @@ function parseOrdersFromSQL(sql: string): OrderData[] {
     
     for (const tuple of tuples) {
       const values = parseCSVValues(tuple[1]);
-      // ospos_sales_items: sale_id, item_id, description, serialnumber, line, quantity_purchased, item_cost_price, item_unit_price, ...
       if (values.length >= 8) {
         const saleId = parseInt(cleanSQLString(values[0])) || 0;
         const item: OrderItemData = {
@@ -188,7 +179,6 @@ function parseOrdersFromSQL(sql: string): OrderData[] {
     }
   }
   
-  // Then parse sales
   const salesPattern = /INSERT\s+INTO\s+`?ospos_sales`?\s*\([^)]+\)\s*VALUES\s*((?:\([^)]+\),?\s*)+)/gi;
   const salesMatches = sql.matchAll(salesPattern);
   
@@ -199,7 +189,6 @@ function parseOrdersFromSQL(sql: string): OrderData[] {
     
     for (const tuple of tuples) {
       const values = parseCSVValues(tuple[1]);
-      // ospos_sales: sale_id, sale_time, customer_id, employee_id, comment, invoice_number, ...
       if (values.length >= 2) {
         const saleId = parseInt(cleanSQLString(values[0])) || 0;
         const items = orderItemsMap.get(saleId) || [];
@@ -223,7 +212,7 @@ function parseOrdersFromSQL(sql: string): OrderData[] {
   return orders;
 }
 
-// Parse SQL INSERT statements for categories (ospos uses 'category' field in items table)
+// Parse SQL INSERT statements for categories
 function parseCategoriesFromItems(items: ItemData[]): CategoryData[] {
   const categoryNames = new Set<string>();
   items.forEach(item => {
@@ -268,17 +257,14 @@ function parseCSVValues(str: string): string[] {
 // Clean SQL string values
 function cleanSQLString(value: string): string {
   if (!value) return '';
-  // Remove surrounding quotes
   let cleaned = value.trim();
   if ((cleaned.startsWith("'") && cleaned.endsWith("'")) || 
       (cleaned.startsWith('"') && cleaned.endsWith('"'))) {
     cleaned = cleaned.slice(1, -1);
   }
-  // Handle NULL
   if (cleaned.toUpperCase() === 'NULL') {
     return '';
   }
-  // Unescape escaped quotes
   cleaned = cleaned.replace(/''/g, "'").replace(/\\'/g, "'");
   return cleaned;
 }
@@ -337,7 +323,6 @@ export default function Migration() {
       return;
     }
 
-    // Parse SQL to extract items, categories, employees, and orders
     const items = parseItemsFromSQL(sqlData);
     const categories = parseCategoriesFromItems(items);
     const employees = parseEmployeesFromSQL(sqlData);
@@ -385,13 +370,7 @@ export default function Migration() {
     setError(null);
 
     try {
-      const response = await supabase.functions.invoke("migrate-openpos", {
-        body: payload,
-      });
-
-      if (response.error) {
-        throw new Error(response.error.message);
-      }
+      const response = await apiClient.post("/migrate", payload);
 
       if (response.data.success) {
         setResult(response.data.result);
@@ -501,31 +480,26 @@ export default function Migration() {
                   onChange={(e) => setSqlData(e.target.value)}
                 />
 
-                <Button 
-                  onClick={runSQLMigration} 
+                <Button
+                  onClick={runSQLMigration}
                   disabled={isRunning || !sqlData.trim()}
                   className="w-full"
-                  size="lg"
                 >
                   {isRunning ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Parsing & Migrating...
+                      Migrating...
                     </>
                   ) : (
-                    "Parse SQL & Run Migration"
+                    <>
+                      <Database className="mr-2 h-4 w-4" />
+                      Run SQL Migration
+                    </>
                   )}
                 </Button>
               </TabsContent>
-
+              
               <TabsContent value="json" className="space-y-4 mt-4">
-                <div className="text-sm text-muted-foreground space-y-2">
-                  <p><strong>Required JSON format:</strong></p>
-                  <pre className="bg-muted p-3 rounded-lg text-xs overflow-x-auto">
-{JSON.stringify(sampleData, null, 2)}
-                  </pre>
-                </div>
-
                 <div className="flex gap-2">
                   <input
                     type="file"
@@ -545,31 +519,32 @@ export default function Migration() {
                     variant="outline"
                     onClick={() => setJsonData(JSON.stringify(sampleData, null, 2))}
                   >
-                    <FileJson className="mr-2 h-4 w-4" />
                     Load Sample Data
                   </Button>
                 </div>
 
                 <Textarea
                   placeholder="Paste your JSON data here..."
-                  className="min-h-[200px] font-mono text-sm"
+                  className="min-h-[200px] font-mono text-xs"
                   value={jsonData}
                   onChange={(e) => setJsonData(e.target.value)}
                 />
 
-                <Button 
-                  onClick={runJSONMigration} 
+                <Button
+                  onClick={runJSONMigration}
                   disabled={isRunning || !jsonData.trim()}
                   className="w-full"
-                  size="lg"
                 >
                   {isRunning ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Running Migration...
+                      Migrating...
                     </>
                   ) : (
-                    "Run Migration"
+                    <>
+                      <Database className="mr-2 h-4 w-4" />
+                      Run JSON Migration
+                    </>
                   )}
                 </Button>
               </TabsContent>
@@ -577,29 +552,41 @@ export default function Migration() {
           </CardContent>
         </Card>
 
+        {/* Results */}
         {result && (
           <Card className="border-green-500/50 bg-green-500/5">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-green-600">
+              <CardTitle className="flex items-center gap-2 text-green-500">
                 <CheckCircle2 className="h-5 w-5" />
-                Migration Complete
+                Migration Successful
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-2">
-              <p><strong>Categories imported:</strong> {result.categories}</p>
-              <p><strong>Menu items imported:</strong> {result.menuItems}</p>
-              <p><strong>Users imported:</strong> {result.users || 0}</p>
-              <p><strong>Orders imported:</strong> {result.orders || 0}</p>
+            <CardContent>
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <p className="text-muted-foreground">Categories</p>
+                  <p className="text-2xl font-bold">{result.categories}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Menu Items</p>
+                  <p className="text-2xl font-bold">{result.menuItems}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Users</p>
+                  <p className="text-2xl font-bold">{result.users}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Orders</p>
+                  <p className="text-2xl font-bold">{result.orders}</p>
+                </div>
+              </div>
               {result.errors.length > 0 && (
-                <div className="mt-4">
-                  <p className="font-medium text-amber-600">Warnings:</p>
-                  <ul className="text-sm text-muted-foreground list-disc list-inside">
-                    {result.errors.slice(0, 10).map((err, i) => (
+                <div className="mt-4 p-3 bg-amber-500/10 rounded-lg">
+                  <p className="text-sm font-medium text-amber-500">Warnings:</p>
+                  <ul className="text-xs text-muted-foreground mt-1 space-y-1">
+                    {result.errors.map((err, i) => (
                       <li key={i}>{err}</li>
                     ))}
-                    {result.errors.length > 10 && (
-                      <li>...and {result.errors.length - 10} more</li>
-                    )}
                   </ul>
                 </div>
               )}
@@ -616,10 +603,36 @@ export default function Migration() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-sm">{error}</p>
+              <p className="text-sm text-muted-foreground">{error}</p>
             </CardContent>
           </Card>
         )}
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Expected JSON Format</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <pre className="bg-muted p-4 rounded-lg text-xs overflow-x-auto">
+{`{
+  "categories": [
+    { "category_id": 1, "name": "Drinks" },
+    { "category_id": 2, "name": "Food" }
+  ],
+  "items": [
+    {
+      "item_id": 1,
+      "name": "Coca Cola",
+      "category": "Drinks",
+      "unit_price": 500,
+      "cost_price": 200,
+      "description": "Optional description"
+    }
+  ]
+}`}
+            </pre>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

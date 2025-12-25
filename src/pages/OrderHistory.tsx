@@ -1,7 +1,6 @@
 import { useState, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
-import { format, startOfDay, endOfDay, isWithinInterval } from "date-fns";
+import { format, startOfDay, endOfDay } from "date-fns";
 import { Search, Printer, Eye, History, CalendarIcon, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
@@ -35,6 +34,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { ordersApi } from "@/lib/api/orders";
 
 const formatPrice = (price: number) => {
   return new Intl.NumberFormat("en-NG", {
@@ -84,8 +84,8 @@ interface Order {
   subtotal: number;
   total_amount: number;
   created_at: string;
-  order_items: OrderItem[];
-  payments: { payment_method: string }[];
+  items?: OrderItem[];
+  payments?: { payment_method: string }[];
 }
 
 const OrderHistory = () => {
@@ -100,17 +100,7 @@ const OrderHistory = () => {
   const { data: orders = [], isLoading } = useQuery({
     queryKey: ["order-history"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("orders")
-        .select(`
-          *,
-          order_items(*),
-          payments(payment_method)
-        `)
-        .order("created_at", { ascending: false })
-        .limit(500);
-
-      if (error) throw error;
+      const data = await ordersApi.getOrderHistory(500);
       return data as Order[];
     },
   });
@@ -366,7 +356,7 @@ const OrderHistory = () => {
                         {orderTypeLabels[order.order_type] || order.order_type}
                       </TableCell>
                       <TableCell>{order.table_number || "-"}</TableCell>
-                      <TableCell>{order.order_items?.length || 0}</TableCell>
+                      <TableCell>{(order.items || []).length}</TableCell>
                       <TableCell className="font-medium">
                         {formatPrice(order.total_amount)}
                       </TableCell>
@@ -476,23 +466,17 @@ const OrderHistory = () => {
 
                   {/* Items */}
                   <div className="space-y-2">
-                    <div className="flex justify-between text-xs font-bold">
-                      <span>ITEM</span>
-                      <span>AMOUNT</span>
-                    </div>
-                    {selectedOrder.order_items?.map((item) => (
-                      <div key={item.id} className="text-xs">
+                    {(selectedOrder.items || []).map((item, index) => (
+                      <div key={index}>
                         <div className="flex justify-between">
-                          <span className="flex-1 truncate pr-2">
-                            {item.quantity}x {item.item_name}
-                          </span>
-                          <span>₦{item.total_price.toLocaleString()}</span>
+                          <span className="flex-1">{item.item_name}</span>
                         </div>
-                        {item.notes && (
-                          <p className="text-[10px] text-gray-600 pl-4">
-                            Note: {item.notes}
-                          </p>
-                        )}
+                        <div className="flex justify-between text-xs pl-4">
+                          <span>
+                            {item.quantity} x {formatPrice(item.unit_price)}
+                          </span>
+                          <span>{formatPrice(item.total_price)}</span>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -503,64 +487,47 @@ const OrderHistory = () => {
                   <div className="space-y-1 text-xs">
                     <div className="flex justify-between">
                       <span>Subtotal:</span>
-                      <span>₦{selectedOrder.subtotal.toLocaleString()}</span>
+                      <span>{formatPrice(selectedOrder.subtotal)}</span>
                     </div>
-                    <div className="border-t border-gray-400 my-2" />
-                    <div className="flex justify-between font-bold text-base">
+                    <div className="flex justify-between font-bold text-sm border-t border-solid border-gray-400 pt-2 mt-2">
                       <span>TOTAL:</span>
-                      <span>₦{selectedOrder.total_amount.toLocaleString()}</span>
+                      <span>{formatPrice(selectedOrder.total_amount)}</span>
                     </div>
                   </div>
 
                   <div className="border-t border-dashed border-gray-400 my-3" />
 
                   {/* Payment */}
-                  <div className="text-xs">
-                    <div className="flex justify-between">
-                      <span>Payment Method:</span>
-                      <span className="font-bold">
-                        {paymentLabels[selectedOrder.payments?.[0]?.payment_method] ||
-                          selectedOrder.payments?.[0]?.payment_method ||
-                          "N/A"}
-                      </span>
-                    </div>
-                    <div className="flex justify-between mt-1">
-                      <span>Status:</span>
-                      <span className="font-bold">
-                        {selectedOrder.status === "completed" ||
-                        selectedOrder.payments?.length > 0
-                          ? "PAID"
-                          : "UNPAID"}
-                      </span>
-                    </div>
+                  <div className="text-xs text-center">
+                    <p>
+                      Paid by:{" "}
+                      {(selectedOrder.payments || [])[0]?.payment_method
+                        ? paymentLabels[(selectedOrder.payments || [])[0].payment_method] ||
+                          (selectedOrder.payments || [])[0].payment_method
+                        : "N/A"}
+                    </p>
                   </div>
 
-                  <div className="border-t border-dashed border-gray-400 my-3" />
-
                   {/* Footer */}
-                  <div className="text-center text-xs space-y-2">
-                    <p className="font-bold">Thank you for dining with us!</p>
-                    <p>We hope to see you again soon.</p>
-                    <p className="text-[10px] text-gray-500 mt-4">
-                      This receipt serves as proof of payment
-                    </p>
+                  <div className="mt-4 text-center text-xs">
+                    <p>Thank you for dining with us!</p>
+                    <p className="mt-2">*** REPRINT ***</p>
                   </div>
                 </div>
               )}
             </div>
 
             {/* Actions */}
-            <div className="flex gap-3">
+            <div className="flex justify-end gap-2">
               <Button
                 variant="outline"
-                className="flex-1"
                 onClick={() => setShowReceiptDialog(false)}
               >
                 Close
               </Button>
-              <Button className="flex-1" onClick={handlePrint}>
+              <Button onClick={handlePrint}>
                 <Printer className="h-4 w-4 mr-2" />
-                Reprint Receipt
+                Print Receipt
               </Button>
             </div>
           </div>
