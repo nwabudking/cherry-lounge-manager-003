@@ -82,14 +82,14 @@ export const InventoryItemDialog = ({
     onSave({
       ...(item?.id && { id: item.id }),
       name: formData.name,
-      category_id: formData.category_id || null,
+      category_id: formData.category_id === "_none" ? null : formData.category_id || null,
       category: selectedCategory?.name || null,
       unit: formData.unit,
       current_stock: formData.current_stock,
       min_stock_level: formData.min_stock_level,
       cost_per_unit: formData.cost_per_unit || null,
       supplier: selectedSupplier?.name || formData.supplier || null,
-      supplier_id: formData.supplier_id || null,
+      supplier_id: formData.supplier_id === "_none" ? null : formData.supplier_id || null,
     });
   };
 
@@ -115,14 +115,14 @@ export const InventoryItemDialog = ({
             <div className="space-y-2">
               <Label>Category</Label>
               <Select
-                value={formData.category_id}
-                onValueChange={(value) => setFormData({ ...formData, category_id: value })}
+                value={formData.category_id || "_none"}
+                onValueChange={(value) => setFormData({ ...formData, category_id: value === "_none" ? "" : value })}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select category" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">None</SelectItem>
+                  <SelectItem value="_none">None</SelectItem>
                   {categories.map((cat) => (
                     <SelectItem key={cat.id} value={cat.id}>
                       {cat.name}
@@ -180,14 +180,14 @@ export const InventoryItemDialog = ({
               <Label>Supplier</Label>
               {suppliers.length > 0 ? (
                 <Select
-                  value={formData.supplier_id}
-                  onValueChange={(value) => setFormData({ ...formData, supplier_id: value })}
+                  value={formData.supplier_id || "_none"}
+                  onValueChange={(value) => setFormData({ ...formData, supplier_id: value === "_none" ? "" : value })}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select supplier" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">None</SelectItem>
+                    <SelectItem value="_none">None</SelectItem>
                     {suppliers.map((supplier) => (
                       <SelectItem key={supplier.id} value={supplier.id}>
                         {supplier.name}
