@@ -22,14 +22,19 @@ const Kitchen = () => {
   const queryClient = useQueryClient();
   const [filter, setFilter] = useState<"pending" | "preparing" | "all">("pending");
 
-  // Fetch kitchen orders
+  // Fetch kitchen orders (only active orders: pending, preparing, ready)
   const { data: orders = [], isLoading } = useQuery({
     queryKey: ["kitchen-orders", filter],
     queryFn: async () => {
-      const statusFilter = filter === "all" ? undefined : filter;
-      const allOrders = await ordersApi.getOrders({ status: statusFilter });
-      // Filter out bar-only orders for kitchen
-      return allOrders.filter((o) => o.order_type !== "bar_only");
+      // Get all orders and filter client-side for active statuses
+      const allOrders = await ordersApi.getOrders();
+      // Filter for kitchen orders only (not bar_only) and active statuses
+      const activeStatuses = filter === "all" 
+        ? ["pending", "preparing", "ready"] 
+        : [filter];
+      return allOrders.filter(
+        (o) => o.order_type !== "bar_only" && activeStatuses.includes(o.status)
+      );
     },
     refetchInterval: 10000, // Refresh every 10 seconds
   });
