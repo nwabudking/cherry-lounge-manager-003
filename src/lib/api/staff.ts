@@ -153,7 +153,30 @@ export const staffApi = {
   },
 
   resetPassword: async (id: string, newPassword: string): Promise<void> => {
-    // Always use REST API for password reset
+    if (isLovablePreview()) {
+      // Use edge function for password reset in preview
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('Not authenticated');
+      
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/reset-staff-password`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({ userId: id, newPassword }),
+        }
+      );
+      
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to reset password');
+      }
+      return;
+    }
+    // Use REST API for local deployment
     await apiClient.post(`/staff/${id}/reset-password`, { newPassword });
   },
 

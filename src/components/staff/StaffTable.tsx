@@ -15,9 +15,10 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { MoreHorizontal, Edit2, Trash2 } from "lucide-react";
+import { MoreHorizontal, Edit2, Trash2, KeyRound } from "lucide-react";
 import { format } from "date-fns";
 import type { StaffMember } from "@/pages/Staff";
 
@@ -26,6 +27,7 @@ interface StaffTableProps {
   isLoading: boolean;
   onEdit: (staff: StaffMember) => void;
   onDelete: (staff: StaffMember) => void;
+  onResetPassword: (staff: StaffMember) => void;
   canManage: boolean;
   currentUserId?: string;
 }
@@ -45,6 +47,7 @@ export const StaffTable = ({
   isLoading,
   onEdit,
   onDelete,
+  onResetPassword,
   canManage,
   currentUserId,
 }: StaffTableProps) => {
@@ -146,13 +149,20 @@ export const StaffTable = ({
                           Edit
                         </DropdownMenuItem>
                         {!isCurrentUser && (
-                          <DropdownMenuItem
-                            className="text-destructive"
-                            onClick={() => onDelete(member)}
-                          >
-                            <Trash2 className="h-4 w-4 mr-2" />
-                            Delete
-                          </DropdownMenuItem>
+                          <>
+                            <DropdownMenuItem onClick={() => onResetPassword(member)}>
+                              <KeyRound className="h-4 w-4 mr-2" />
+                              Reset Password
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              className="text-destructive"
+                              onClick={() => onDelete(member)}
+                            >
+                              <Trash2 className="h-4 w-4 mr-2" />
+                              Delete
+                            </DropdownMenuItem>
+                          </>
                         )}
                       </DropdownMenuContent>
                     </DropdownMenu>
