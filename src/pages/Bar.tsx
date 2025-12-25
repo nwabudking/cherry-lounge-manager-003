@@ -21,12 +21,19 @@ const Bar = () => {
   const queryClient = useQueryClient();
   const [filter, setFilter] = useState<"pending" | "preparing" | "all">("pending");
 
-  // Fetch bar orders
+  // Fetch bar orders (drinks category orders or bar_only type, active statuses only)
   const { data: orders = [], isLoading } = useQuery({
     queryKey: ["bar-orders", filter],
     queryFn: async () => {
-      const statusFilter = filter === "all" ? undefined : filter;
-      return ordersApi.getOrders({ status: statusFilter });
+      // Get all orders and filter for bar-related and active statuses
+      const allOrders = await ordersApi.getOrders();
+      const activeStatuses = filter === "all" 
+        ? ["pending", "preparing", "ready"] 
+        : [filter];
+      // Show bar_only orders and orders that contain drink items
+      return allOrders.filter(
+        (o) => activeStatuses.includes(o.status)
+      );
     },
     refetchInterval: 10000, // Refresh every 10 seconds
   });
