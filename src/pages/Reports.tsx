@@ -1,14 +1,24 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
 import { ReportsHeader } from "@/components/reports/ReportsHeader";
 import { SalesMetrics } from "@/components/reports/SalesMetrics";
 import { RevenueChart } from "@/components/reports/RevenueChart";
 import { TopItemsChart } from "@/components/reports/TopItemsChart";
 import { SalesByType } from "@/components/reports/SalesByType";
 import { startOfDay, endOfDay, subDays, format } from "date-fns";
+import { ordersApi } from "@/lib/api/orders";
 
 export type DateRange = "today" | "7days" | "30days" | "custom";
+
+interface OrderWithDetails {
+  id: string;
+  order_number: string;
+  order_type: string;
+  total_amount: number;
+  created_at: string;
+  items?: { item_name: string; quantity: number; total_price: number }[];
+  payments?: { payment_method: string; amount: number }[];
+}
 
 const Reports = () => {
   const [dateRange, setDateRange] = useState<DateRange>("7days");
@@ -37,20 +47,11 @@ const Reports = () => {
   const { data: orders = [], isLoading } = useQuery({
     queryKey: ["reports-orders", dateRange, customStart, customEnd],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("orders")
-        .select(`
-          *,
-          order_items (*),
-          payments (*)
-        `)
-        .gte("created_at", start.toISOString())
-        .lte("created_at", end.toISOString())
-        .eq("status", "completed")
-        .order("created_at", { ascending: true });
-
-      if (error) throw error;
-      return data;
+      const data = await ordersApi.getCompletedOrdersByDate(
+        start.toISOString(),
+        end.toISOString()
+      );
+      return data as OrderWithDetails[];
     },
   });
 
@@ -59,7 +60,7 @@ const Reports = () => {
   const totalOrders = orders.length;
   const averageOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
   const totalItems = orders.reduce(
-    (sum, o) => sum + (o.order_items?.reduce((s, i) => s + i.quantity, 0) || 0),
+    (sum, o) => sum + ((o.items || []).reduce((s, i) => s + i.quantity, 0) || 0),
     0
   );
 
@@ -78,7 +79,7 @@ const Reports = () => {
   // Top items
   const itemCounts: Record<string, { name: string; quantity: number; revenue: number }> = {};
   orders.forEach((order) => {
-    order.order_items?.forEach((item) => {
+    (order.items || []).forEach((item) => {
       if (!itemCounts[item.item_name]) {
         itemCounts[item.item_name] = { name: item.item_name, quantity: 0, revenue: 0 };
       }
@@ -104,7 +105,7 @@ const Reports = () => {
 
   // Sales by payment method
   const salesByPayment = orders.reduce((acc, order) => {
-    const method = order.payments?.[0]?.payment_method || "unknown";
+    const method = (order.payments || [])[0]?.payment_method || "unknown";
     acc[method] = (acc[method] || 0) + Number(order.total_amount);
     return acc;
   }, {} as Record<string, number>);

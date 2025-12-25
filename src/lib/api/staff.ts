@@ -65,4 +65,9 @@ export const staffApi = {
     const response = await apiClient.patch<StaffMember>(`/staff/${id}/role`, { role });
     return response.data;
   },
+
+  getProfiles: async (): Promise<{ id: string; full_name: string | null; email: string | null }[]> => {
+    const response = await apiClient.get('/profiles');
+    return response.data;
+  },
 };

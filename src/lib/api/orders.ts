@@ -128,4 +128,40 @@ export const ordersApi = {
     });
     return response.data;
   },
+
+  getOrdersWithDetails: async (filters?: OrderFilters & { includeItems?: boolean; includePayments?: boolean }): Promise<Order[]> => {
+    const response = await apiClient.get<Order[]>('/orders', { 
+      params: { 
+        ...filters, 
+        includeItems: true, 
+        includePayments: true 
+      } 
+    });
+    return response.data;
+  },
+
+  getCompletedOrdersByDate: async (startDate: string, endDate: string, cashierId?: string): Promise<Order[]> => {
+    const response = await apiClient.get<Order[]>('/orders', {
+      params: {
+        status: 'completed',
+        startDate,
+        endDate,
+        cashierId,
+        includeItems: true,
+        includePayments: true,
+      },
+    });
+    return response.data;
+  },
+
+  getOrderHistory: async (limit?: number): Promise<Order[]> => {
+    const response = await apiClient.get<Order[]>('/orders', {
+      params: {
+        includeItems: true,
+        includePayments: true,
+        limit: limit || 500,
+      },
+    });
+    return response.data;
+  },
 };
