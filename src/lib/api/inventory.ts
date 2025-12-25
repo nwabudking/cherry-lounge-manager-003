@@ -81,14 +81,13 @@ export const inventoryApi = {
 
   getLowStockItems: async (): Promise<InventoryItem[]> => {
     if (isLovablePreview()) {
+      // Fetch all active items and filter in JS (PostgREST can't compare column to column)
       const { data, error } = await supabase
         .from('inventory_items')
         .select('*')
         .eq('is_active', true)
-        .or('current_stock.lte.min_stock_level,current_stock.eq.0')
         .order('current_stock');
       if (error) throw new Error(error.message);
-      // Filter in JS since the OR with column reference is tricky
       return (data || []).filter(item => item.current_stock <= item.min_stock_level);
     }
     const response = await apiClient.get<InventoryItem[]>('/inventory/items/low-stock');
