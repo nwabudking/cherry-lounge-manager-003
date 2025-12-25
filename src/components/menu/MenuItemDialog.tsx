@@ -1,6 +1,4 @@
 import { useState, useEffect } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
 import {
   Dialog,
   DialogContent,
@@ -21,6 +19,13 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Upload, X, Package } from "lucide-react";
+import { 
+  useMenuCategories, 
+  useCreateMenuItem, 
+  useUpdateMenuItem 
+} from "@/hooks/useMenu";
+import { useActiveInventoryItems, useCreateInventoryItem } from "@/hooks/useInventory";
+import { menuApi } from "@/lib/api/menu";
 
 interface MenuItemDialogProps {
   open: boolean;
@@ -42,7 +47,6 @@ interface MenuItemDialogProps {
 
 export const MenuItemDialog = ({ open, onOpenChange, editingItem }: MenuItemDialogProps) => {
   const { toast } = useToast();
-  const queryClient = useQueryClient();
   const [uploading, setUploading] = useState(false);
 
   const [form, setForm] = useState({
@@ -88,89 +92,11 @@ export const MenuItemDialog = ({ open, onOpenChange, editingItem }: MenuItemDial
     }
   }, [editingItem, open]);
 
-  const { data: categories = [] } = useQuery({
-    queryKey: ["menu-categories"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("menu_categories")
-        .select("*")
-        .order("sort_order");
-      if (error) throw error;
-      return data;
-    },
-  });
-
-  const { data: inventoryItems = [] } = useQuery({
-    queryKey: ["inventory-items-active"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("inventory_items")
-        .select("id, name, current_stock, unit")
-        .eq("is_active", true)
-        .order("name");
-      if (error) throw error;
-      return data;
-    },
-  });
-
-  const saveMutation = useMutation({
-    mutationFn: async () => {
-      let inventoryItemId = form.inventory_item_id || null;
-
-      // Auto-create inventory item for new menu items (inventory is source of truth)
-      if (!editingItem && !inventoryItemId) {
-        const { data: newInventoryItem, error: invError } = await supabase
-          .from("inventory_items")
-          .insert({
-            name: form.name,
-            current_stock: 0,
-            min_stock_level: 10,
-            unit: "pcs",
-            cost_per_unit: form.cost_price ? parseFloat(form.cost_price) : null,
-          })
-          .select("id")
-          .single();
-
-        if (invError) throw invError;
-        inventoryItemId = newInventoryItem.id;
-      }
-
-      const payload = {
-        name: form.name,
-        description: form.description || null,
-        price: parseFloat(form.price),
-        cost_price: form.cost_price ? parseFloat(form.cost_price) : null,
-        category_id: form.category_id || null,
-        image_url: form.image_url || null,
-        is_available: inventoryItemId ? false : form.is_available, // Start unavailable if tracked
-        is_active: form.is_active,
-        inventory_item_id: inventoryItemId,
-        track_inventory: true, // Always track inventory
-      };
-
-      if (editingItem) {
-        const { error } = await supabase
-          .from("menu_items")
-          .update(payload)
-          .eq("id", editingItem.id);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase.from("menu_items").insert(payload);
-        if (error) throw error;
-      }
-    },
-    onSuccess: () => {
-      toast({ title: editingItem ? "Item updated" : "Item created" });
-      queryClient.invalidateQueries({ queryKey: ["menu-items-all"] });
-      queryClient.invalidateQueries({ queryKey: ["menu-items"] });
-      queryClient.invalidateQueries({ queryKey: ["inventory-items"] });
-      queryClient.invalidateQueries({ queryKey: ["inventory-items-active"] });
-      onOpenChange(false);
-    },
-    onError: (error) => {
-      toast({ title: "Error saving item", description: String(error), variant: "destructive" });
-    },
-  });
+  const { data: categories = [] } = useMenuCategories();
+  const { data: inventoryItems = [] } = useActiveInventoryItems();
+  const createMenuItemMutation = useCreateMenuItem();
+  const updateMenuItemMutation = useUpdateMenuItem();
+  const createInventoryItemMutation = useCreateInventoryItem();
 
   // Allowed image MIME types and max file size (5MB)
   const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
@@ -202,30 +128,8 @@ export const MenuItemDialog = ({ open, onOpenChange, editingItem }: MenuItemDial
 
     setUploading(true);
     try {
-      // Get file extension from MIME type for security (not from filename)
-      const mimeToExt: Record<string, string> = {
-        'image/jpeg': 'jpg',
-        'image/png': 'png',
-        'image/gif': 'gif',
-        'image/webp': 'webp'
-      };
-      const fileExt = mimeToExt[file.type] || 'jpg';
-      const fileName = `${crypto.randomUUID()}.${fileExt}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from("menu-images")
-        .upload(fileName, file, {
-          contentType: file.type,
-          upsert: false
-        });
-
-      if (uploadError) throw uploadError;
-
-      const { data: { publicUrl } } = supabase.storage
-        .from("menu-images")
-        .getPublicUrl(fileName);
-
-      setForm((prev) => ({ ...prev, image_url: publicUrl }));
+      const imageUrl = await menuApi.uploadImage(file);
+      setForm((prev) => ({ ...prev, image_url: imageUrl }));
       toast({ title: "Image uploaded" });
     } catch (error) {
       toast({ title: "Upload failed", variant: "destructive" });
@@ -237,6 +141,51 @@ export const MenuItemDialog = ({ open, onOpenChange, editingItem }: MenuItemDial
   const removeImage = () => {
     setForm((prev) => ({ ...prev, image_url: "" }));
   };
+
+  const handleSave = async () => {
+    try {
+      let inventoryItemId = form.inventory_item_id || null;
+
+      // Auto-create inventory item for new menu items
+      if (!editingItem && !inventoryItemId) {
+        const newInventoryItem = await createInventoryItemMutation.mutateAsync({
+          name: form.name,
+          current_stock: 0,
+          min_stock_level: 10,
+          unit: "pcs",
+          cost_per_unit: form.cost_price ? parseFloat(form.cost_price) : undefined,
+        });
+        inventoryItemId = newInventoryItem.id;
+      }
+
+      const payload = {
+        name: form.name,
+        description: form.description || null,
+        price: parseFloat(form.price),
+        cost_price: form.cost_price ? parseFloat(form.cost_price) : null,
+        category_id: form.category_id || null,
+        image_url: form.image_url || null,
+        is_available: inventoryItemId ? false : form.is_available,
+        is_active: form.is_active,
+        inventory_item_id: inventoryItemId,
+        track_inventory: true,
+      };
+
+      if (editingItem) {
+        await updateMenuItemMutation.mutateAsync({ id: editingItem.id, data: payload });
+      } else {
+        await createMenuItemMutation.mutateAsync(payload);
+      }
+
+      onOpenChange(false);
+    } catch (error) {
+      // Error already handled by mutation hooks
+    }
+  };
+
+  const isSaving = createMenuItemMutation.isPending || 
+                   updateMenuItemMutation.isPending || 
+                   createInventoryItemMutation.isPending;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -417,10 +366,10 @@ export const MenuItemDialog = ({ open, onOpenChange, editingItem }: MenuItemDial
               Cancel
             </Button>
             <Button
-              onClick={() => saveMutation.mutate()}
-              disabled={!form.name || !form.price || saveMutation.isPending}
+              onClick={handleSave}
+              disabled={!form.name || !form.price || isSaving}
             >
-              {saveMutation.isPending ? (
+              {isSaving ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                   Saving...

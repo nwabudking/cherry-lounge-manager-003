@@ -1,16 +1,18 @@
 import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
-import { useToast } from "@/hooks/use-toast";
 import { Plus, Search, Pencil, Trash2, ImageIcon } from "lucide-react";
 import { MenuItemDialog } from "./MenuItemDialog";
+import { 
+  useMenuItems, 
+  useDeleteMenuItem, 
+  useToggleMenuItemAvailability 
+} from "@/hooks/useMenu";
 
-interface MenuItem {
+interface MenuItemWithCategory {
   id: string;
   name: string;
   description: string | null;
@@ -20,7 +22,9 @@ interface MenuItem {
   is_available: boolean;
   is_active: boolean;
   category_id: string | null;
-  menu_categories: { name: string } | null;
+  category_name?: string | null;
+  inventory_item_id?: string | null;
+  track_inventory?: boolean;
 }
 
 const formatPrice = (price: number) => {
@@ -32,60 +36,21 @@ const formatPrice = (price: number) => {
 };
 
 export const MenuItemsTab = () => {
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
+  const [editingItem, setEditingItem] = useState<MenuItemWithCategory | null>(null);
 
-  const { data: items = [], isLoading } = useQuery({
-    queryKey: ["menu-items-all"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("menu_items")
-        .select("*, menu_categories(name)")
-        .order("name");
-      if (error) throw error;
-      return data as MenuItem[];
-    },
-  });
-
-  const toggleAvailabilityMutation = useMutation({
-    mutationFn: async ({ id, is_available }: { id: string; is_available: boolean }) => {
-      const { error } = await supabase
-        .from("menu_items")
-        .update({ is_available })
-        .eq("id", id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["menu-items-all"] });
-      queryClient.invalidateQueries({ queryKey: ["menu-items"] });
-    },
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from("menu_items").delete().eq("id", id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      toast({ title: "Item deleted" });
-      queryClient.invalidateQueries({ queryKey: ["menu-items-all"] });
-      queryClient.invalidateQueries({ queryKey: ["menu-items"] });
-    },
-    onError: () => {
-      toast({ title: "Error deleting item", variant: "destructive" });
-    },
-  });
+  const { data: items = [], isLoading } = useMenuItems();
+  const deleteMutation = useDeleteMenuItem();
+  const toggleAvailabilityMutation = useToggleMenuItemAvailability();
 
   const filteredItems = items.filter(
     (item) =>
       item.name.toLowerCase().includes(search.toLowerCase()) ||
-      item.menu_categories?.name.toLowerCase().includes(search.toLowerCase())
+      (item as any).category_name?.toLowerCase().includes(search.toLowerCase())
   );
 
-  const handleEdit = (item: MenuItem) => {
+  const handleEdit = (item: MenuItemWithCategory) => {
     setEditingItem(item);
     setDialogOpen(true);
   };
@@ -138,9 +103,9 @@ export const MenuItemsTab = () => {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <h3 className="font-medium truncate">{item.name}</h3>
-                      {item.menu_categories && (
+                      {(item as any).category_name && (
                         <Badge variant="secondary" className="shrink-0">
-                          {item.menu_categories.name}
+                          {(item as any).category_name}
                         </Badge>
                       )}
                     </div>
@@ -170,7 +135,7 @@ export const MenuItemsTab = () => {
                         }
                       />
                     </div>
-                    <Button variant="ghost" size="icon" onClick={() => handleEdit(item)}>
+                    <Button variant="ghost" size="icon" onClick={() => handleEdit(item as MenuItemWithCategory)}>
                       <Pencil className="h-4 w-4" />
                     </Button>
                     <Button
