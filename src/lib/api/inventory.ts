@@ -148,11 +148,28 @@ export const inventoryApi = {
 
   // Suppliers
   getSuppliers: async (): Promise<Supplier[]> => {
+    if (isLovablePreview()) {
+      const { data, error } = await supabase
+        .from('suppliers')
+        .select('*')
+        .order('name');
+      if (error) throw new Error(error.message);
+      return data || [];
+    }
     const response = await apiClient.get<Supplier[]>('/suppliers');
     return response.data;
   },
 
   getActiveSuppliers: async (): Promise<Supplier[]> => {
+    if (isLovablePreview()) {
+      const { data, error } = await supabase
+        .from('suppliers')
+        .select('*')
+        .eq('is_active', true)
+        .order('name');
+      if (error) throw new Error(error.message);
+      return data || [];
+    }
     const response = await apiClient.get<Supplier[]>('/suppliers', {
       params: { active: true },
     });
