@@ -7,6 +7,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
+import Profile from "./pages/Profile";
 import Migration from "./pages/Migration";
 import DataImport from "./pages/DataImport";
 import EODReport from "./pages/EODReport";
@@ -28,6 +29,7 @@ const App = () => (
             {/* Protected Dashboard Routes */}
             <Route element={<DashboardLayout />}>
               <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/profile" element={<Profile />} />
               <Route path="/pos" element={<POS />} />
               <Route path="/orders" element={<Orders />} />
               <Route path="/order-history" element={<OrderHistory />} />
