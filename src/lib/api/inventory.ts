@@ -1,4 +1,5 @@
 import apiClient from './client';
+import { supabase } from '@/integrations/supabase/client';
 
 export interface InventoryItem {
   id: string;
@@ -41,14 +42,37 @@ export interface Supplier {
   updated_at: string;
 }
 
+// Check if we're in Lovable preview (no local backend)
+const isLovablePreview = (): boolean => {
+  return window.location.hostname.includes('lovableproject.com') || 
+         window.location.hostname.includes('lovable.app');
+};
+
 export const inventoryApi = {
   // Inventory Items
   getItems: async (): Promise<InventoryItem[]> => {
+    if (isLovablePreview()) {
+      const { data, error } = await supabase
+        .from('inventory_items')
+        .select('*')
+        .order('name');
+      if (error) throw new Error(error.message);
+      return data || [];
+    }
     const response = await apiClient.get<InventoryItem[]>('/inventory/items');
     return response.data;
   },
 
   getActiveItems: async (): Promise<InventoryItem[]> => {
+    if (isLovablePreview()) {
+      const { data, error } = await supabase
+        .from('inventory_items')
+        .select('*')
+        .eq('is_active', true)
+        .order('name');
+      if (error) throw new Error(error.message);
+      return data || [];
+    }
     const response = await apiClient.get<InventoryItem[]>('/inventory/items', {
       params: { active: true },
     });
@@ -56,6 +80,17 @@ export const inventoryApi = {
   },
 
   getLowStockItems: async (): Promise<InventoryItem[]> => {
+    if (isLovablePreview()) {
+      const { data, error } = await supabase
+        .from('inventory_items')
+        .select('*')
+        .eq('is_active', true)
+        .or('current_stock.lte.min_stock_level,current_stock.eq.0')
+        .order('current_stock');
+      if (error) throw new Error(error.message);
+      // Filter in JS since the OR with column reference is tricky
+      return (data || []).filter(item => item.current_stock <= item.min_stock_level);
+    }
     const response = await apiClient.get<InventoryItem[]>('/inventory/items/low-stock');
     return response.data;
   },

@@ -1,4 +1,5 @@
 import apiClient from './client';
+import { supabase } from '@/integrations/supabase/client';
 
 export interface OrderItem {
   id: string;
@@ -69,8 +70,45 @@ export interface OrderFilters {
   search?: string;
 }
 
+// Check if we're in Lovable preview (no local backend)
+const isLovablePreview = (): boolean => {
+  return window.location.hostname.includes('lovableproject.com') || 
+         window.location.hostname.includes('lovable.app');
+};
+
 export const ordersApi = {
   getOrders: async (filters?: OrderFilters): Promise<Order[]> => {
+    if (isLovablePreview()) {
+      let query = supabase
+        .from('orders')
+        .select('*, order_items:order_items(*)')
+        .order('created_at', { ascending: false });
+
+      if (filters?.status) {
+        query = query.eq('status', filters.status);
+      }
+      if (filters?.orderType) {
+        query = query.eq('order_type', filters.orderType);
+      }
+      if (filters?.startDate) {
+        query = query.gte('created_at', filters.startDate);
+      }
+      if (filters?.endDate) {
+        query = query.lte('created_at', filters.endDate);
+      }
+      if (filters?.search) {
+        query = query.ilike('order_number', `%${filters.search}%`);
+      }
+
+      const { data, error } = await query;
+      if (error) throw new Error(error.message);
+      
+      return (data || []).map(order => ({
+        ...order,
+        items: order.order_items || [],
+      }));
+    }
+    
     const response = await apiClient.get<Order[]>('/orders', { params: filters });
     return response.data;
   },
