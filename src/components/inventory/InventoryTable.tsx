@@ -58,12 +58,12 @@ export const InventoryTable = ({
 
   const getStockStatus = (item: InventoryItem) => {
     if (item.current_stock <= 0) {
-      return { label: "Out of Stock", variant: "destructive" as const };
+      return { label: "Out of Stock", variant: "destructive" as const, className: "" };
     }
     if (item.current_stock <= item.min_stock_level) {
-      return { label: "Low Stock", variant: "secondary" as const };
+      return { label: "Low Stock", variant: "outline" as const, className: "border-amber-500/50 bg-amber-500/10 text-amber-600" };
     }
-    return { label: "In Stock", variant: "default" as const };
+    return { label: "In Stock", variant: "default" as const, className: "" };
   };
 
   return (
@@ -99,7 +99,7 @@ export const InventoryTable = ({
                 </TableCell>
                 <TableCell className="text-muted-foreground">{item.unit}</TableCell>
                 <TableCell>
-                  <Badge variant={status.variant}>{status.label}</Badge>
+                  <Badge variant={status.variant} className={status.className}>{status.label}</Badge>
                 </TableCell>
                 {canManage && (
                   <TableCell className="text-right">
