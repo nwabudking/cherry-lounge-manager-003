@@ -54,6 +54,7 @@ CREATE TABLE IF NOT EXISTS restaurant_settings (
 CREATE TABLE IF NOT EXISTS menu_categories (
   id VARCHAR(36) PRIMARY KEY,
   name VARCHAR(255) NOT NULL,
+  category_type ENUM('food', 'drink', 'other') DEFAULT 'food',
   sort_order INT DEFAULT 0,
   is_active BOOLEAN DEFAULT TRUE,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
