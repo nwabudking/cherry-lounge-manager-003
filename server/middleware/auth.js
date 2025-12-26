@@ -1,19 +1,36 @@
 import jwt from 'jsonwebtoken';
-import { readFileSync } from 'fs';
+import { readFileSync, existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const getJwtConfig = () => {
-  const configPath = process.env.JWT_CONFIG_PATH || join(__dirname, '../config/jwt.json');
-  try {
-    const configContent = readFileSync(configPath, 'utf-8');
-    return JSON.parse(configContent);
-  } catch (error) {
-    console.error('Failed to read JWT config from:', configPath);
-    return { secret: 'fallback-secret', expiresIn: '24h' };
+  // First, check for environment variables (used in Docker)
+  if (process.env.JWT_SECRET) {
+    console.log('Using JWT configuration from environment variables');
+    return {
+      secret: process.env.JWT_SECRET,
+      expiresIn: process.env.JWT_EXPIRES_IN || '24h'
+    };
   }
+
+  // Fall back to JSON config file (used for non-Docker deployments)
+  const configPath = process.env.JWT_CONFIG_PATH || join(__dirname, '../config/jwt.json');
+  
+  if (existsSync(configPath)) {
+    try {
+      console.log('Using JWT configuration from:', configPath);
+      const configContent = readFileSync(configPath, 'utf-8');
+      return JSON.parse(configContent);
+    } catch (error) {
+      console.error('Failed to read JWT config from:', configPath);
+    }
+  }
+
+  // Final fallback
+  console.warn('WARNING: Using fallback JWT secret - change this in production!');
+  return { secret: 'fallback-secret-change-in-production', expiresIn: '24h' };
 };
 
 export const generateToken = (payload, expiresIn = null) => {
