@@ -26,11 +26,11 @@ import {
   Heart,
   BarChart3,
   Settings,
-  Cherry,
   DatabaseBackup,
   FileText,
   Download,
 } from 'lucide-react';
+import logoImage from '@/assets/logo.png';
 
 interface NavItem {
   title: string;
@@ -98,14 +98,8 @@ export const AppSidebar = () => {
   return (
     <Sidebar className="border-r border-sidebar-border bg-sidebar">
       <SidebarHeader className="p-4 border-b border-sidebar-border">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 gradient-cherry rounded-xl flex items-center justify-center glow-cherry-sm">
-            <Cherry className="w-5 h-5 text-primary-foreground" />
-          </div>
-          <div>
-            <h1 className="font-bold text-foreground text-lg">Cherry</h1>
-            <p className="text-xs text-muted-foreground">Dining Lounge</p>
-          </div>
+        <div className="flex items-center justify-center">
+          <img src={logoImage} alt="Cherry Dining & Lounge" className="h-14 w-auto object-contain" />
         </div>
       </SidebarHeader>
 
