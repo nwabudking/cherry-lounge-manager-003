@@ -1,0 +1,917 @@
+{
+  "project": {
+    "name": "Cherry Dining & Lounge POS",
+    "description": "Complete Point of Sale system for restaurant/bar management with inventory tracking, staff management, and real-time order processing",
+    "target_platform": "WAMP/XAMPP (Windows) or LAMP (Linux)",
+    "technology_stack": {
+      "backend": "PHP 8.0+",
+      "database": "MySQL 8.0+",
+      "frontend": "HTML5, CSS3, JavaScript (or React/Vue optional)",
+      "authentication": "JWT or PHP Sessions"
+    }
+  },
+
+  "database_schema": {
+    "database_name": "cherry_dining",
+    "charset": "utf8mb4",
+    "collation": "utf8mb4_unicode_ci",
+
+    "tables": {
+      "users": {
+        "description": "Authentication and login credentials",
+        "columns": {
+          "id": "VARCHAR(36) PRIMARY KEY",
+          "email": "VARCHAR(255) NOT NULL UNIQUE",
+          "password_hash": "VARCHAR(255) NOT NULL",
+          "created_at": "DATETIME DEFAULT CURRENT_TIMESTAMP"
+        }
+      },
+
+      "profiles": {
+        "description": "User profile information",
+        "columns": {
+          "id": "VARCHAR(36) PRIMARY KEY",
+          "email": "VARCHAR(255)",
+          "full_name": "VARCHAR(255)",
+          "avatar_url": "TEXT NULL",
+          "created_at": "DATETIME DEFAULT CURRENT_TIMESTAMP",
+          "updated_at": "DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"
+        },
+        "foreign_keys": {
+          "id": "REFERENCES users(id) ON DELETE CASCADE"
+        }
+      },
+
+      "user_roles": {
+        "description": "Role-based access control - CRITICAL: Keep roles separate from users table",
+        "columns": {
+          "id": "VARCHAR(36) PRIMARY KEY",
+          "user_id": "VARCHAR(36) NOT NULL",
+          "role": "ENUM('super_admin', 'manager', 'cashier', 'bar_staff', 'kitchen_staff', 'inventory_officer', 'accountant') DEFAULT 'cashier'",
+          "created_at": "DATETIME DEFAULT CURRENT_TIMESTAMP"
+        },
+        "foreign_keys": {
+          "user_id": "REFERENCES users(id) ON DELETE CASCADE"
+        }
+      },
+
+      "restaurant_settings": {
+        "description": "Global restaurant configuration",
+        "columns": {
+          "id": "VARCHAR(36) PRIMARY KEY",
+          "name": "VARCHAR(255) DEFAULT 'Cherry Dining Lounge'",
+          "tagline": "VARCHAR(255) DEFAULT '& Lounge'",
+          "address": "TEXT",
+          "city": "VARCHAR(100) DEFAULT 'Lagos'",
+          "country": "VARCHAR(100) DEFAULT 'Nigeria'",
+          "phone": "VARCHAR(50)",
+          "email": "VARCHAR(255)",
+          "logo_url": "TEXT NULL",
+          "currency": "VARCHAR(10) DEFAULT 'NGN'",
+          "timezone": "VARCHAR(50) DEFAULT 'Africa/Lagos'",
+          "receipt_footer": "TEXT DEFAULT 'Thank you for dining with us!'",
+          "receipt_show_logo": "BOOLEAN DEFAULT TRUE",
+          "created_at": "DATETIME DEFAULT CURRENT_TIMESTAMP",
+          "updated_at": "DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"
+        }
+      },
+
+      "menu_categories": {
+        "description": "Categories for menu items (food, drink, other)",
+        "columns": {
+          "id": "VARCHAR(36) PRIMARY KEY",
+          "name": "VARCHAR(255) NOT NULL",
+          "category_type": "ENUM('food', 'drink', 'other') DEFAULT 'food'",
+          "sort_order": "INT DEFAULT 0",
+          "is_active": "BOOLEAN DEFAULT TRUE",
+          "created_at": "DATETIME DEFAULT CURRENT_TIMESTAMP"
+        }
+      },
+
+      "suppliers": {
+        "description": "Inventory suppliers/vendors",
+        "columns": {
+          "id": "VARCHAR(36) PRIMARY KEY",
+          "name": "VARCHAR(255) NOT NULL",
+          "contact_person": "VARCHAR(255)",
+          "phone": "VARCHAR(50)",
+          "email": "VARCHAR(255)",
+          "address": "TEXT",
+          "notes": "TEXT",
+          "is_active": "BOOLEAN DEFAULT TRUE",
+          "created_at": "DATETIME DEFAULT CURRENT_TIMESTAMP",
+          "updated_at": "DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"
+        }
+      },
+
+      "inventory_items": {
+        "description": "Stock/inventory tracking",
+        "columns": {
+          "id": "VARCHAR(36) PRIMARY KEY",
+          "name": "VARCHAR(255) NOT NULL",
+          "category": "VARCHAR(100)",
+          "category_id": "VARCHAR(36) NULL",
+          "unit": "VARCHAR(50) DEFAULT 'pcs'",
+          "current_stock": "DECIMAL(10,2) DEFAULT 0",
+          "min_stock_level": "DECIMAL(10,2) DEFAULT 5",
+          "cost_per_unit": "DECIMAL(10,2)",
+          "supplier": "VARCHAR(255)",
+          "supplier_id": "VARCHAR(36) NULL",
+          "is_active": "BOOLEAN DEFAULT TRUE",
+          "created_at": "DATETIME DEFAULT CURRENT_TIMESTAMP",
+          "updated_at": "DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"
+        },
+        "foreign_keys": {
+          "category_id": "REFERENCES menu_categories(id) ON DELETE SET NULL",
+          "supplier_id": "REFERENCES suppliers(id) ON DELETE SET NULL"
+        }
+      },
+
+      "menu_items": {
+        "description": "Products available for sale",
+        "columns": {
+          "id": "VARCHAR(36) PRIMARY KEY",
+          "name": "VARCHAR(255) NOT NULL",
+          "description": "TEXT",
+          "price": "DECIMAL(10,2) NOT NULL",
+          "cost_price": "DECIMAL(10,2)",
+          "image_url": "TEXT NULL",
+          "is_active": "BOOLEAN DEFAULT TRUE",
+          "is_available": "BOOLEAN DEFAULT TRUE",
+          "category_id": "VARCHAR(36) NULL",
+          "inventory_item_id": "VARCHAR(36) NULL",
+          "track_inventory": "BOOLEAN DEFAULT FALSE",
+          "created_at": "DATETIME DEFAULT CURRENT_TIMESTAMP",
+          "updated_at": "DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"
+        },
+        "foreign_keys": {
+          "category_id": "REFERENCES menu_categories(id) ON DELETE SET NULL",
+          "inventory_item_id": "REFERENCES inventory_items(id) ON DELETE SET NULL"
+        }
+      },
+
+      "orders": {
+        "description": "Customer orders",
+        "columns": {
+          "id": "VARCHAR(36) PRIMARY KEY",
+          "order_number": "VARCHAR(50) NOT NULL UNIQUE",
+          "order_type": "ENUM('dine_in', 'takeaway', 'delivery', 'bar_only') DEFAULT 'dine_in'",
+          "table_number": "VARCHAR(20)",
+          "subtotal": "DECIMAL(10,2) DEFAULT 0",
+          "vat_amount": "DECIMAL(10,2) DEFAULT 0",
+          "service_charge": "DECIMAL(10,2) DEFAULT 0",
+          "discount_amount": "DECIMAL(10,2) DEFAULT 0",
+          "total_amount": "DECIMAL(10,2) DEFAULT 0",
+          "status": "ENUM('pending', 'preparing', 'ready', 'completed', 'cancelled') DEFAULT 'pending'",
+          "notes": "TEXT",
+          "created_by": "VARCHAR(36)",
+          "created_at": "DATETIME DEFAULT CURRENT_TIMESTAMP",
+          "updated_at": "DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"
+        }
+      },
+
+      "order_items": {
+        "description": "Individual items within an order",
+        "columns": {
+          "id": "VARCHAR(36) PRIMARY KEY",
+          "order_id": "VARCHAR(36) NOT NULL",
+          "menu_item_id": "VARCHAR(36) NULL",
+          "item_name": "VARCHAR(255) NOT NULL",
+          "quantity": "INT DEFAULT 1",
+          "unit_price": "DECIMAL(10,2) NOT NULL",
+          "total_price": "DECIMAL(10,2) NOT NULL",
+          "notes": "TEXT",
+          "created_at": "DATETIME DEFAULT CURRENT_TIMESTAMP"
+        },
+        "foreign_keys": {
+          "order_id": "REFERENCES orders(id) ON DELETE CASCADE",
+          "menu_item_id": "REFERENCES menu_items(id) ON DELETE SET NULL"
+        }
+      },
+
+      "payments": {
+        "description": "Payment records for orders",
+        "columns": {
+          "id": "VARCHAR(36) PRIMARY KEY",
+          "order_id": "VARCHAR(36) NOT NULL",
+          "payment_method": "ENUM('cash', 'card', 'transfer', 'mobile') DEFAULT 'cash'",
+          "amount": "DECIMAL(10,2) NOT NULL",
+          "reference": "VARCHAR(255)",
+          "status": "ENUM('pending', 'completed', 'failed', 'refunded') DEFAULT 'completed'",
+          "created_by": "VARCHAR(36)",
+          "created_at": "DATETIME DEFAULT CURRENT_TIMESTAMP"
+        },
+        "foreign_keys": {
+          "order_id": "REFERENCES orders(id) ON DELETE CASCADE"
+        }
+      },
+
+      "stock_movements": {
+        "description": "Inventory stock changes audit trail",
+        "columns": {
+          "id": "VARCHAR(36) PRIMARY KEY",
+          "inventory_item_id": "VARCHAR(36) NOT NULL",
+          "movement_type": "ENUM('in', 'out', 'adjustment') NOT NULL",
+          "quantity": "DECIMAL(10,2) NOT NULL",
+          "previous_stock": "DECIMAL(10,2) NOT NULL",
+          "new_stock": "DECIMAL(10,2) NOT NULL",
+          "notes": "TEXT",
+          "reference": "VARCHAR(36)",
+          "created_by": "VARCHAR(36)",
+          "created_at": "DATETIME DEFAULT CURRENT_TIMESTAMP"
+        },
+        "foreign_keys": {
+          "inventory_item_id": "REFERENCES inventory_items(id) ON DELETE CASCADE"
+        }
+      }
+    },
+
+    "indexes": [
+      "CREATE INDEX idx_orders_created_at ON orders(created_at)",
+      "CREATE INDEX idx_orders_status ON orders(status)",
+      "CREATE INDEX idx_order_items_order_id ON order_items(order_id)",
+      "CREATE INDEX idx_payments_order_id ON payments(order_id)",
+      "CREATE INDEX idx_stock_movements_item ON stock_movements(inventory_item_id)",
+      "CREATE INDEX idx_menu_items_category ON menu_items(category_id)"
+    ],
+
+    "stored_procedures": {
+      "generate_order_number": {
+        "description": "Generate unique order number with date prefix",
+        "sql": "CREATE FUNCTION generate_order_number() RETURNS VARCHAR(50) BEGIN DECLARE new_number VARCHAR(50); SET new_number = CONCAT('ORD-', DATE_FORMAT(NOW(), '%Y%m%d'), '-', LPAD(FLOOR(RAND() * 10000), 4, '0')); RETURN new_number; END"
+      }
+    }
+  },
+
+  "api_endpoints": {
+    "authentication": {
+      "POST /api/auth/login": {
+        "description": "User login",
+        "request_body": {
+          "email": "string",
+          "password": "string"
+        },
+        "response": {
+          "user": "object",
+          "access_token": "string",
+          "refresh_token": "string"
+        },
+        "logic": [
+          "1. Validate email exists in users table",
+          "2. Verify password using password_verify()",
+          "3. Get user role from user_roles table",
+          "4. Get profile from profiles table",
+          "5. Generate JWT tokens",
+          "6. Return user data with tokens"
+        ]
+      },
+      "POST /api/auth/register": {
+        "description": "Create new user account",
+        "request_body": {
+          "email": "string",
+          "password": "string",
+          "full_name": "string"
+        },
+        "logic": [
+          "1. Check if email already exists",
+          "2. Hash password using password_hash()",
+          "3. Create user record",
+          "4. Create profile record",
+          "5. Assign default role (first user = super_admin, others = cashier)",
+          "6. Generate tokens and return"
+        ]
+      },
+      "POST /api/auth/refresh": {
+        "description": "Refresh access token",
+        "request_body": {
+          "refresh_token": "string"
+        }
+      },
+      "GET /api/auth/me": {
+        "description": "Get current user profile",
+        "requires_auth": true
+      },
+      "POST /api/auth/change-password": {
+        "description": "Change user password",
+        "requires_auth": true,
+        "request_body": {
+          "new_password": "string"
+        }
+      }
+    },
+
+    "menu": {
+      "GET /api/menu/categories": {
+        "description": "Get all menu categories",
+        "requires_auth": true,
+        "query_params": {
+          "active_only": "boolean (optional)"
+        }
+      },
+      "POST /api/menu/categories": {
+        "description": "Create new category",
+        "requires_auth": true,
+        "allowed_roles": ["super_admin", "manager"],
+        "request_body": {
+          "name": "string",
+          "category_type": "food|drink|other",
+          "sort_order": "number"
+        }
+      },
+      "PATCH /api/menu/categories/:id": {
+        "description": "Update category",
+        "requires_auth": true,
+        "allowed_roles": ["super_admin", "manager"]
+      },
+      "DELETE /api/menu/categories/:id": {
+        "description": "Soft delete category (set is_active = false)",
+        "requires_auth": true,
+        "allowed_roles": ["super_admin", "manager"]
+      },
+      "GET /api/menu/items": {
+        "description": "Get all menu items with category info",
+        "requires_auth": true,
+        "query_params": {
+          "category_id": "string (optional)",
+          "active_only": "boolean (optional)"
+        },
+        "response": "Array of menu items with category details"
+      },
+      "POST /api/menu/items": {
+        "description": "Create new menu item",
+        "requires_auth": true,
+        "allowed_roles": ["super_admin", "manager"]
+      },
+      "PATCH /api/menu/items/:id": {
+        "description": "Update menu item",
+        "requires_auth": true,
+        "allowed_roles": ["super_admin", "manager"]
+      },
+      "DELETE /api/menu/items/:id": {
+        "description": "Soft delete menu item",
+        "requires_auth": true,
+        "allowed_roles": ["super_admin", "manager"]
+      }
+    },
+
+    "orders": {
+      "GET /api/orders": {
+        "description": "Get orders with filtering",
+        "requires_auth": true,
+        "query_params": {
+          "status": "string (optional)",
+          "order_type": "string (optional)",
+          "start_date": "date (optional)",
+          "end_date": "date (optional)",
+          "limit": "number (default 100)"
+        }
+      },
+      "GET /api/orders/:id": {
+        "description": "Get single order with items and payments",
+        "requires_auth": true
+      },
+      "POST /api/orders": {
+        "description": "Create new order",
+        "requires_auth": true,
+        "allowed_roles": ["super_admin", "manager", "cashier", "bar_staff"],
+        "request_body": {
+          "order_type": "dine_in|takeaway|delivery|bar_only",
+          "table_number": "string (optional)",
+          "items": [
+            {
+              "menu_item_id": "string",
+              "item_name": "string",
+              "quantity": "number",
+              "unit_price": "number",
+              "notes": "string (optional)"
+            }
+          ],
+          "notes": "string (optional)"
+        },
+        "logic": [
+          "1. Generate unique order number",
+          "2. Calculate subtotal from items",
+          "3. Calculate VAT (7.5% in Nigeria)",
+          "4. Calculate service charge if applicable",
+          "5. Insert order record",
+          "6. Insert order_items records",
+          "7. If track_inventory, reduce stock",
+          "8. Return created order"
+        ]
+      },
+      "PATCH /api/orders/:id": {
+        "description": "Update order status",
+        "requires_auth": true,
+        "request_body": {
+          "status": "pending|preparing|ready|completed|cancelled"
+        }
+      },
+      "POST /api/orders/:id/payment": {
+        "description": "Add payment to order",
+        "requires_auth": true,
+        "allowed_roles": ["super_admin", "manager", "cashier"],
+        "request_body": {
+          "payment_method": "cash|card|transfer|mobile",
+          "amount": "number",
+          "reference": "string (optional)"
+        },
+        "logic": [
+          "1. Validate order exists and not already paid",
+          "2. Create payment record",
+          "3. Update order status to 'completed'",
+          "4. Return payment confirmation"
+        ]
+      },
+      "GET /api/orders/kitchen": {
+        "description": "Get kitchen orders (food items only, pending/preparing/ready)",
+        "requires_auth": true,
+        "logic": [
+          "1. Get orders with status IN ('pending', 'preparing', 'ready')",
+          "2. Filter to only include items from 'food' category_type",
+          "3. Exclude 'bar_only' order types"
+        ]
+      },
+      "GET /api/orders/bar": {
+        "description": "Get bar orders (drink items only)",
+        "requires_auth": true,
+        "logic": [
+          "1. Get orders with status IN ('pending', 'preparing', 'ready')",
+          "2. Filter to only include items from 'drink' category_type",
+          "3. Include 'bar_only' order types"
+        ]
+      }
+    },
+
+    "inventory": {
+      "GET /api/inventory": {
+        "description": "Get all inventory items",
+        "requires_auth": true,
+        "query_params": {
+          "category_id": "string (optional)",
+          "low_stock_only": "boolean (optional)"
+        }
+      },
+      "POST /api/inventory": {
+        "description": "Create inventory item",
+        "requires_auth": true,
+        "allowed_roles": ["super_admin", "manager", "inventory_officer"]
+      },
+      "PATCH /api/inventory/:id": {
+        "description": "Update inventory item",
+        "requires_auth": true,
+        "allowed_roles": ["super_admin", "manager", "inventory_officer"]
+      },
+      "POST /api/inventory/:id/movement": {
+        "description": "Record stock movement",
+        "requires_auth": true,
+        "allowed_roles": ["super_admin", "manager", "inventory_officer"],
+        "request_body": {
+          "movement_type": "in|out|adjustment",
+          "quantity": "number",
+          "notes": "string (optional)"
+        },
+        "logic": [
+          "1. Get current stock",
+          "2. Calculate new stock based on movement type",
+          "3. Create stock_movements record",
+          "4. Update inventory_items.current_stock",
+          "5. Return updated item"
+        ]
+      },
+      "GET /api/inventory/low-stock": {
+        "description": "Get items below minimum stock level",
+        "requires_auth": true,
+        "sql": "SELECT * FROM inventory_items WHERE current_stock <= min_stock_level AND is_active = 1"
+      },
+      "GET /api/inventory/movements": {
+        "description": "Get stock movement history",
+        "requires_auth": true,
+        "query_params": {
+          "inventory_item_id": "string (optional)",
+          "start_date": "date (optional)",
+          "end_date": "date (optional)"
+        }
+      }
+    },
+
+    "suppliers": {
+      "GET /api/suppliers": {
+        "description": "Get all suppliers",
+        "requires_auth": true
+      },
+      "POST /api/suppliers": {
+        "description": "Create supplier",
+        "requires_auth": true,
+        "allowed_roles": ["super_admin", "manager", "inventory_officer"]
+      },
+      "PATCH /api/suppliers/:id": {
+        "description": "Update supplier",
+        "requires_auth": true,
+        "allowed_roles": ["super_admin", "manager", "inventory_officer"]
+      },
+      "DELETE /api/suppliers/:id": {
+        "description": "Soft delete supplier",
+        "requires_auth": true,
+        "allowed_roles": ["super_admin", "manager", "inventory_officer"]
+      }
+    },
+
+    "staff": {
+      "GET /api/staff": {
+        "description": "Get all staff members with roles",
+        "requires_auth": true,
+        "allowed_roles": ["super_admin", "manager"],
+        "sql": "SELECT u.id, u.email, p.full_name, ur.role, p.created_at FROM users u JOIN profiles p ON u.id = p.id JOIN user_roles ur ON u.id = ur.user_id"
+      },
+      "POST /api/staff": {
+        "description": "Create new staff member",
+        "requires_auth": true,
+        "allowed_roles": ["super_admin", "manager"],
+        "request_body": {
+          "email": "string",
+          "password": "string",
+          "full_name": "string",
+          "role": "string"
+        }
+      },
+      "PATCH /api/staff/:id": {
+        "description": "Update staff member",
+        "requires_auth": true,
+        "allowed_roles": ["super_admin", "manager"]
+      },
+      "DELETE /api/staff/:id": {
+        "description": "Delete staff member",
+        "requires_auth": true,
+        "allowed_roles": ["super_admin"]
+      },
+      "POST /api/staff/:id/reset-password": {
+        "description": "Reset staff password",
+        "requires_auth": true,
+        "allowed_roles": ["super_admin", "manager"],
+        "request_body": {
+          "new_password": "string"
+        }
+      },
+      "PATCH /api/staff/:id/role": {
+        "description": "Update staff role",
+        "requires_auth": true,
+        "allowed_roles": ["super_admin"]
+      }
+    },
+
+    "settings": {
+      "GET /api/settings": {
+        "description": "Get restaurant settings",
+        "requires_auth": true
+      },
+      "PATCH /api/settings": {
+        "description": "Update restaurant settings",
+        "requires_auth": true,
+        "allowed_roles": ["super_admin", "manager"]
+      }
+    },
+
+    "reports": {
+      "GET /api/reports/sales": {
+        "description": "Get sales report",
+        "requires_auth": true,
+        "allowed_roles": ["super_admin", "manager", "accountant"],
+        "query_params": {
+          "start_date": "date",
+          "end_date": "date",
+          "group_by": "day|week|month"
+        },
+        "response": {
+          "total_revenue": "number",
+          "total_orders": "number",
+          "average_order_value": "number",
+          "by_period": "array",
+          "by_order_type": "array",
+          "top_items": "array"
+        }
+      },
+      "GET /api/reports/eod": {
+        "description": "End of day report",
+        "requires_auth": true,
+        "allowed_roles": ["super_admin", "manager", "cashier"],
+        "query_params": {
+          "date": "date (default: today)"
+        }
+      }
+    }
+  },
+
+  "frontend_pages": {
+    "/auth": {
+      "description": "Login page",
+      "components": ["LoginForm", "SignupForm (hidden by default)"],
+      "features": [
+        "Email/password login",
+        "Remember me option",
+        "Initialize system data button (first-time setup)"
+      ]
+    },
+    "/dashboard": {
+      "description": "Main dashboard",
+      "allowed_roles": ["super_admin", "manager"],
+      "components": ["StatsCards", "RevenueChart", "RecentOrders", "LowStockAlert"],
+      "stats": [
+        "Today's revenue",
+        "Total orders today",
+        "Active menu items",
+        "Low stock items count"
+      ]
+    },
+    "/pos": {
+      "description": "Point of Sale terminal",
+      "allowed_roles": ["super_admin", "manager", "cashier", "bar_staff"],
+      "layout": {
+        "left": "Menu grid with category tabs",
+        "right": "Cart panel with order details"
+      },
+      "features": [
+        "Category filtering",
+        "Search menu items",
+        "Add/remove items from cart",
+        "Adjust quantities",
+        "Apply discounts",
+        "Select order type (dine_in, takeaway, delivery, bar_only)",
+        "Table number input",
+        "Order notes",
+        "Checkout with payment method selection",
+        "Print receipt"
+      ]
+    },
+    "/kitchen": {
+      "description": "Kitchen display system",
+      "allowed_roles": ["super_admin", "manager", "kitchen_staff"],
+      "features": [
+        "View pending food orders",
+        "Update order status (preparing, ready)",
+        "Real-time updates via polling or WebSocket",
+        "Order timer/age display"
+      ],
+      "filtering": "Only shows items with category_type = 'food', excludes 'bar_only' orders"
+    },
+    "/bar": {
+      "description": "Bar display system",
+      "allowed_roles": ["super_admin", "manager", "bar_staff"],
+      "features": [
+        "View pending drink orders",
+        "Update order status",
+        "Real-time updates"
+      ],
+      "filtering": "Only shows items with category_type = 'drink', includes 'bar_only' orders"
+    },
+    "/orders": {
+      "description": "Order history and management",
+      "allowed_roles": ["super_admin", "manager", "cashier"],
+      "features": [
+        "Filter by status, date, order type",
+        "View order details",
+        "Cancel orders",
+        "Reprint receipts"
+      ]
+    },
+    "/menu": {
+      "description": "Menu management",
+      "allowed_roles": ["super_admin", "manager"],
+      "tabs": ["Menu Items", "Categories"],
+      "features": [
+        "CRUD menu items",
+        "CRUD categories",
+        "Set prices",
+        "Toggle availability",
+        "Link to inventory items"
+      ]
+    },
+    "/inventory": {
+      "description": "Inventory management",
+      "allowed_roles": ["super_admin", "manager", "inventory_officer"],
+      "tabs": ["Inventory Items", "Suppliers"],
+      "features": [
+        "CRUD inventory items",
+        "Stock movements (in/out/adjustment)",
+        "Low stock alerts",
+        "CRUD suppliers",
+        "Stock level history"
+      ]
+    },
+    "/staff": {
+      "description": "Staff management",
+      "allowed_roles": ["super_admin", "manager"],
+      "features": [
+        "View all staff",
+        "Add new staff",
+        "Edit staff details",
+        "Change roles",
+        "Reset passwords",
+        "Deactivate staff"
+      ]
+    },
+    "/reports": {
+      "description": "Sales and business reports",
+      "allowed_roles": ["super_admin", "manager", "accountant"],
+      "features": [
+        "Date range selection",
+        "Revenue charts",
+        "Sales by order type",
+        "Top selling items",
+        "Export to CSV/PDF"
+      ]
+    },
+    "/eod-report": {
+      "description": "End of day report",
+      "allowed_roles": ["super_admin", "manager", "cashier"],
+      "features": [
+        "Daily summary",
+        "Orders breakdown",
+        "Payment methods breakdown",
+        "Print/export report"
+      ]
+    },
+    "/settings": {
+      "description": "Restaurant settings",
+      "allowed_roles": ["super_admin", "manager"],
+      "features": [
+        "Update restaurant info",
+        "Receipt customization",
+        "Currency settings",
+        "Logo upload"
+      ]
+    },
+    "/profile": {
+      "description": "User profile",
+      "allowed_roles": "all authenticated users",
+      "features": [
+        "View profile",
+        "Change password"
+      ]
+    }
+  },
+
+  "role_permissions": {
+    "super_admin": {
+      "description": "Full system access",
+      "can_access": ["all pages"],
+      "special_abilities": [
+        "Create/delete staff",
+        "Change user roles",
+        "Access all reports",
+        "Modify settings"
+      ]
+    },
+    "manager": {
+      "description": "Management access",
+      "can_access": ["dashboard", "pos", "kitchen", "bar", "orders", "menu", "inventory", "staff", "reports", "eod-report", "settings"],
+      "cannot": ["Delete staff", "Change super_admin role"]
+    },
+    "cashier": {
+      "description": "Sales operations",
+      "can_access": ["pos", "orders", "eod-report"],
+      "can_do": ["Create orders", "Process payments", "View own orders"]
+    },
+    "bar_staff": {
+      "description": "Bar operations",
+      "can_access": ["pos", "bar"],
+      "can_do": ["Create bar orders", "Update drink order status"]
+    },
+    "kitchen_staff": {
+      "description": "Kitchen operations",
+      "can_access": ["kitchen"],
+      "can_do": ["View food orders", "Update food order status"]
+    },
+    "inventory_officer": {
+      "description": "Inventory management",
+      "can_access": ["inventory"],
+      "can_do": ["Manage inventory", "Record stock movements", "Manage suppliers"]
+    },
+    "accountant": {
+      "description": "Financial reporting",
+      "can_access": ["reports"],
+      "can_do": ["View all financial reports", "Export data"]
+    }
+  },
+
+  "business_logic": {
+    "order_number_generation": {
+      "format": "ORD-YYYYMMDD-XXXX",
+      "example": "ORD-20251226-0001"
+    },
+    "pricing_calculations": {
+      "subtotal": "SUM(quantity * unit_price) for all items",
+      "vat_rate": 0.075,
+      "vat_amount": "subtotal * 0.075",
+      "service_charge": "Optional, typically 10% for dine_in",
+      "total_amount": "subtotal + vat_amount + service_charge - discount_amount"
+    },
+    "inventory_tracking": {
+      "on_order_create": "If menu_item.track_inventory = true, reduce inventory_item.current_stock by quantity",
+      "on_order_cancel": "Restore stock if order had inventory items",
+      "low_stock_alert": "current_stock <= min_stock_level"
+    },
+    "receipt_data": {
+      "header": ["Restaurant name", "Tagline", "Address", "Phone"],
+      "body": ["Order number", "Date/time", "Order type", "Table (if dine_in)", "Items with quantities and prices", "Subtotal", "VAT", "Service charge", "Discount", "Total"],
+      "footer": ["Payment method", "Custom footer text", "Logo (optional)"]
+    }
+  },
+
+  "php_implementation_hints": {
+    "folder_structure": {
+      "root": [
+        "index.php (entry point)",
+        "config/database.php",
+        "config/jwt.php",
+        "api/",
+        "classes/",
+        "middleware/",
+        "public/",
+        "views/"
+      ],
+      "api": [
+        "auth.php",
+        "menu.php",
+        "orders.php",
+        "inventory.php",
+        "staff.php",
+        "settings.php",
+        "reports.php"
+      ],
+      "classes": [
+        "Database.php",
+        "User.php",
+        "Order.php",
+        "MenuItem.php",
+        "Inventory.php",
+        "JWT.php"
+      ]
+    },
+    "recommended_libraries": {
+      "jwt": "firebase/php-jwt",
+      "routing": "nikic/fast-route or custom .htaccess",
+      "validation": "respect/validation",
+      "pdf": "tecnickcom/tcpdf or dompdf/dompdf"
+    },
+    "htaccess_for_api": {
+      "content": "RewriteEngine On\nRewriteCond %{REQUEST_FILENAME} !-f\nRewriteCond %{REQUEST_FILENAME} !-d\nRewriteRule ^api/(.*)$ api/index.php?route=$1 [QSA,L]"
+    },
+    "security_checklist": [
+      "Use prepared statements for ALL queries",
+      "Hash passwords with password_hash()",
+      "Verify passwords with password_verify()",
+      "Validate and sanitize all inputs",
+      "Use HTTPS in production",
+      "Implement rate limiting",
+      "Set secure session cookies",
+      "Validate JWT on every protected route",
+      "Check user roles before sensitive operations"
+    ]
+  },
+
+  "sample_data": {
+    "default_admin": {
+      "email": "admin@cherrydining.com",
+      "password": "admin123",
+      "full_name": "System Administrator",
+      "role": "super_admin"
+    },
+    "sample_categories": [
+      { "name": "Appetizers", "category_type": "food", "sort_order": 1 },
+      { "name": "Main Course", "category_type": "food", "sort_order": 2 },
+      { "name": "Desserts", "category_type": "food", "sort_order": 3 },
+      { "name": "Soft Drinks", "category_type": "drink", "sort_order": 4 },
+      { "name": "Alcoholic Beverages", "category_type": "drink", "sort_order": 5 },
+      { "name": "Cocktails", "category_type": "drink", "sort_order": 6 }
+    ],
+    "sample_menu_items": [
+      { "name": "Jollof Rice", "price": 2500, "category": "Main Course" },
+      { "name": "Fried Rice", "price": 2500, "category": "Main Course" },
+      { "name": "Grilled Chicken", "price": 3500, "category": "Main Course" },
+      { "name": "Chapman", "price": 1500, "category": "Soft Drinks" },
+      { "name": "Heineken", "price": 1200, "category": "Alcoholic Beverages" }
+    ]
+  },
+
+  "deployment_notes": {
+    "wamp_xampp_setup": [
+      "1. Install WAMP or XAMPP",
+      "2. Copy project to www or htdocs folder",
+      "3. Create database using phpMyAdmin",
+      "4. Run schema.sql to create tables",
+      "5. Update config/database.php with credentials",
+      "6. Access via http://localhost/project-folder"
+    ],
+    "environment_config": {
+      "development": {
+        "display_errors": true,
+        "jwt_secret": "dev-secret-change-in-production"
+      },
+      "production": {
+        "display_errors": false,
+        "jwt_secret": "use-strong-random-secret",
+        "force_https": true
+      }
+    }
+  }
+}
