@@ -6,8 +6,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { Cherry, Eye, EyeOff, Loader2 } from 'lucide-react';
+import { Eye, EyeOff, Loader2 } from 'lucide-react';
 import { z } from 'zod';
+import logoImage from '@/assets/logo.png';
 
 const emailSchema = z.string().email('Please enter a valid email address');
 const passwordSchema = z.string().min(6, 'Password must be at least 6 characters');
@@ -108,13 +109,10 @@ const Auth = () => {
       
       <Card className="w-full max-w-md relative z-10 glass-dark border-border/50 animate-scale-in">
         <CardHeader className="text-center space-y-4">
-          <div className="mx-auto w-16 h-16 gradient-cherry rounded-2xl flex items-center justify-center glow-cherry">
-            <Cherry className="w-8 h-8 text-primary-foreground" />
+          <div className="mx-auto">
+            <img src={logoImage} alt="Cherry Dining & Lounge" className="h-20 w-auto object-contain" />
           </div>
           <div>
-            <CardTitle className="text-2xl font-bold text-foreground">
-              Cherry Dining Lounge
-            </CardTitle>
             <CardDescription className="text-muted-foreground mt-2">
               {isSignUp ? 'Create your account' : 'Staff Login'}
             </CardDescription>
