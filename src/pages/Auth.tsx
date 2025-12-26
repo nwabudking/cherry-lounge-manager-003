@@ -6,9 +6,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { Eye, EyeOff, Loader2 } from 'lucide-react';
+import { Eye, EyeOff, Loader2, Database } from 'lucide-react';
 import { z } from 'zod';
 import logoImage from '@/assets/logo.png';
+import apiClient from '@/lib/api/client';
 
 const emailSchema = z.string().email('Please enter a valid email address');
 const passwordSchema = z.string().min(6, 'Password must be at least 6 characters');
@@ -20,6 +21,7 @@ const Auth = () => {
   const [fullName, setFullName] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isBootstrapping, setIsBootstrapping] = useState(false);
   const [errors, setErrors] = useState<{ email?: string; password?: string; fullName?: string }>({});
   
   const { signIn, signUp, isAuthenticated } = useAuth();
@@ -96,6 +98,28 @@ const Auth = () => {
       }
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // TEMPORARY: Bootstrap system data - Remove this after initial setup
+  const handleBootstrap = async () => {
+    setIsBootstrapping(true);
+    try {
+      const response = await apiClient.post('/bootstrap/data');
+      const data = response.data;
+      
+      toast({
+        title: 'System Initialized!',
+        description: `Created: ${data.results.categories} categories, ${data.results.menuItems} menu items, ${data.results.staff} staff members. Admin: admin@cherrydining.com / admin123`,
+      });
+    } catch (error: any) {
+      toast({
+        variant: 'destructive',
+        title: 'Initialization Failed',
+        description: error.response?.data?.error || 'Failed to initialize system data',
+      });
+    } finally {
+      setIsBootstrapping(false);
     }
   };
 
@@ -211,6 +235,36 @@ const Auth = () => {
               Contact your administrator if you need an account.
             </p>
           )}
+
+          {/* TEMPORARY: Bootstrap Button - Remove after initial setup */}
+          <div className="mt-6 pt-6 border-t border-border/50">
+            <p className="text-xs text-muted-foreground text-center mb-3">
+              First time setup? Initialize system with sample data:
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full border-primary/50 text-primary hover:bg-primary/10"
+              onClick={handleBootstrap}
+              disabled={isBootstrapping}
+            >
+              {isBootstrapping ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Initializing...
+                </>
+              ) : (
+                <>
+                  <Database className="w-4 h-4 mr-2" />
+                  Initialize System Data
+                </>
+              )}
+            </Button>
+            <p className="text-xs text-muted-foreground text-center mt-2">
+              Creates admin user, categories, menu items & staff
+            </p>
+          </div>
+          {/* END TEMPORARY */}
         </CardContent>
       </Card>
     </div>
