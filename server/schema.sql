@@ -186,7 +186,7 @@ VALUES (UUID(), 'Cherry Dining Lounge', '& Lounge', 'NGN', 'Africa/Lagos');
 -- Create default admin user (password: admin123)
 -- Password hash for 'admin123'
 INSERT INTO users (id, email, password_hash) 
-VALUES (UUID(), 'admin@cherrydining.com', '$2a$10$rQnJ1X8/VZ8rZvN6XvZ7Z.B5wKj8VxX8qwzZZxNz5VXz5VxZ5VxZ5');
+VALUES (UUID(), 'admin@cherrydining.com', '$2a$10$N9qo8uLOickgx2ZMRZoMyuqj.WzHE3L.CJpQvSWxVrVbA5fWIvElu');
 
 -- Get the admin user id and create profile/role
 SET @admin_id = (SELECT id FROM users WHERE email = 'admin@cherrydining.com');
