@@ -63,6 +63,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const response = await authApi.login({ email, password });
       setUser(response.user);
+      // Return success only after state is set
       return { error: null };
     } catch (error) {
       console.error('Login error:', error);
