@@ -1,5 +1,4 @@
 import apiClient from './client';
-import { supabase } from '@/integrations/supabase/client';
 
 export interface InventoryItem {
   id: string;
@@ -48,43 +47,14 @@ export interface Supplier {
   updated_at: string;
 }
 
-// Check if we're in Lovable preview (no local backend)
-const isLovablePreview = (): boolean => {
-  return window.location.hostname.includes('lovableproject.com') || 
-         window.location.hostname.includes('lovable.app');
-};
-
 export const inventoryApi = {
   // Inventory Items
   getItems: async (): Promise<InventoryItem[]> => {
-    if (isLovablePreview()) {
-      const { data, error } = await supabase
-        .from('inventory_items')
-        .select('*, menu_categories(id, name)')
-        .order('name');
-      if (error) throw new Error(error.message);
-      return (data || []).map(item => ({
-        ...item,
-        category: item.menu_categories?.name || item.category,
-      }));
-    }
     const response = await apiClient.get<InventoryItem[]>('/inventory/items');
     return response.data;
   },
 
   getActiveItems: async (): Promise<InventoryItem[]> => {
-    if (isLovablePreview()) {
-      const { data, error } = await supabase
-        .from('inventory_items')
-        .select('*, menu_categories(id, name)')
-        .eq('is_active', true)
-        .order('name');
-      if (error) throw new Error(error.message);
-      return (data || []).map(item => ({
-        ...item,
-        category: item.menu_categories?.name || item.category,
-      }));
-    }
     const response = await apiClient.get<InventoryItem[]>('/inventory/items', {
       params: { active: true },
     });
@@ -92,95 +62,31 @@ export const inventoryApi = {
   },
 
   getLowStockItems: async (): Promise<InventoryItem[]> => {
-    if (isLovablePreview()) {
-      const { data, error } = await supabase
-        .from('inventory_items')
-        .select('*, menu_categories(id, name)')
-        .eq('is_active', true)
-        .order('current_stock');
-      if (error) throw new Error(error.message);
-      return (data || [])
-        .filter(item => item.current_stock <= item.min_stock_level)
-        .map(item => ({
-          ...item,
-          category: item.menu_categories?.name || item.category,
-        }));
-    }
     const response = await apiClient.get<InventoryItem[]>('/inventory/items/low-stock');
     return response.data;
   },
 
   getItem: async (id: string): Promise<InventoryItem> => {
-    if (isLovablePreview()) {
-      const { data, error } = await supabase
-        .from('inventory_items')
-        .select('*')
-        .eq('id', id)
-        .single();
-      if (error) throw new Error(error.message);
-      return data;
-    }
     const response = await apiClient.get<InventoryItem>(`/inventory/items/${id}`);
     return response.data;
   },
 
   createItem: async (itemData: Partial<InventoryItem>): Promise<InventoryItem> => {
-    if (isLovablePreview()) {
-      const { data, error } = await supabase
-        .from('inventory_items')
-        .insert([itemData as any])
-        .select()
-        .single();
-      if (error) throw new Error(error.message);
-      return data;
-    }
     const response = await apiClient.post<InventoryItem>('/inventory/items', itemData);
     return response.data;
   },
 
   updateItem: async (id: string, itemData: Partial<InventoryItem>): Promise<InventoryItem> => {
-    if (isLovablePreview()) {
-      const { data, error } = await supabase
-        .from('inventory_items')
-        .update(itemData)
-        .eq('id', id)
-        .select()
-        .single();
-      if (error) throw new Error(error.message);
-      return data;
-    }
-    const response = await apiClient.put<InventoryItem>(`/inventory/items/${id}`, itemData);
+    const response = await apiClient.patch<InventoryItem>(`/inventory/items/${id}`, itemData);
     return response.data;
   },
 
   deleteItem: async (id: string): Promise<void> => {
-    if (isLovablePreview()) {
-      const { error } = await supabase
-        .from('inventory_items')
-        .update({ is_active: false })
-        .eq('id', id);
-      if (error) throw new Error(error.message);
-      return;
-    }
     await apiClient.delete(`/inventory/items/${id}`);
   },
 
   // Stock Movements
   getMovements: async (itemId?: string): Promise<StockMovement[]> => {
-    if (isLovablePreview()) {
-      let query = supabase
-        .from('stock_movements')
-        .select('*')
-        .order('created_at', { ascending: false });
-      
-      if (itemId) {
-        query = query.eq('inventory_item_id', itemId);
-      }
-      
-      const { data, error } = await query;
-      if (error) throw new Error(error.message);
-      return data || [];
-    }
     const response = await apiClient.get<StockMovement[]>('/inventory/movements', {
       params: itemId ? { itemId } : undefined,
     });
@@ -188,48 +94,9 @@ export const inventoryApi = {
   },
 
   addStock: async (itemId: string, quantity: number, notes?: string): Promise<StockMovement> => {
-    if (isLovablePreview()) {
-      const { data: { user } } = await supabase.auth.getUser();
-      
-      // Get current stock
-      const { data: item, error: itemError } = await supabase
-        .from('inventory_items')
-        .select('current_stock')
-        .eq('id', itemId)
-        .single();
-      
-      if (itemError) throw new Error(itemError.message);
-      
-      const previousStock = item.current_stock;
-      const newStock = previousStock + quantity;
-      
-      // Update inventory
-      const { error: updateError } = await supabase
-        .from('inventory_items')
-        .update({ current_stock: newStock })
-        .eq('id', itemId);
-      
-      if (updateError) throw new Error(updateError.message);
-      
-      // Create movement record
-      const { data: movement, error: movementError } = await supabase
-        .from('stock_movements')
-        .insert([{
-          inventory_item_id: itemId,
-          movement_type: 'in',
-          quantity,
-          previous_stock: previousStock,
-          new_stock: newStock,
-          notes: notes || null,
-          created_by: user?.id || null,
-        }])
-        .select()
-        .single();
-      
-      if (movementError) throw new Error(movementError.message);
-      return movement;
-    }
-    const response = await apiClient.post<StockMovement>(`/inventory/items/${itemId}/add-stock`, {
+    const response = await apiClient.post<StockMovement>('/inventory/movements', {
+      inventory_item_id: itemId,
+      movement_type: 'in',
       quantity,
       notes,
     });
@@ -237,48 +104,9 @@ export const inventoryApi = {
   },
 
   removeStock: async (itemId: string, quantity: number, notes?: string): Promise<StockMovement> => {
-    if (isLovablePreview()) {
-      const { data: { user } } = await supabase.auth.getUser();
-      
-      // Get current stock
-      const { data: item, error: itemError } = await supabase
-        .from('inventory_items')
-        .select('current_stock')
-        .eq('id', itemId)
-        .single();
-      
-      if (itemError) throw new Error(itemError.message);
-      
-      const previousStock = item.current_stock;
-      const newStock = Math.max(0, previousStock - quantity);
-      
-      // Update inventory
-      const { error: updateError } = await supabase
-        .from('inventory_items')
-        .update({ current_stock: newStock })
-        .eq('id', itemId);
-      
-      if (updateError) throw new Error(updateError.message);
-      
-      // Create movement record
-      const { data: movement, error: movementError } = await supabase
-        .from('stock_movements')
-        .insert([{
-          inventory_item_id: itemId,
-          movement_type: 'out',
-          quantity,
-          previous_stock: previousStock,
-          new_stock: newStock,
-          notes: notes || null,
-          created_by: user?.id || null,
-        }])
-        .select()
-        .single();
-      
-      if (movementError) throw new Error(movementError.message);
-      return movement;
-    }
-    const response = await apiClient.post<StockMovement>(`/inventory/items/${itemId}/remove-stock`, {
+    const response = await apiClient.post<StockMovement>('/inventory/movements', {
+      inventory_item_id: itemId,
+      movement_type: 'out',
       quantity,
       notes,
     });
@@ -286,49 +114,10 @@ export const inventoryApi = {
   },
 
   adjustStock: async (itemId: string, newStockLevel: number, notes?: string): Promise<StockMovement> => {
-    if (isLovablePreview()) {
-      const { data: { user } } = await supabase.auth.getUser();
-      
-      // Get current stock
-      const { data: item, error: itemError } = await supabase
-        .from('inventory_items')
-        .select('current_stock')
-        .eq('id', itemId)
-        .single();
-      
-      if (itemError) throw new Error(itemError.message);
-      
-      const previousStock = item.current_stock;
-      const quantity = Math.abs(newStockLevel - previousStock);
-      
-      // Update inventory
-      const { error: updateError } = await supabase
-        .from('inventory_items')
-        .update({ current_stock: newStockLevel })
-        .eq('id', itemId);
-      
-      if (updateError) throw new Error(updateError.message);
-      
-      // Create movement record
-      const { data: movement, error: movementError } = await supabase
-        .from('stock_movements')
-        .insert([{
-          inventory_item_id: itemId,
-          movement_type: 'adjustment',
-          quantity,
-          previous_stock: previousStock,
-          new_stock: newStockLevel,
-          notes: notes || null,
-          created_by: user?.id || null,
-        }])
-        .select()
-        .single();
-      
-      if (movementError) throw new Error(movementError.message);
-      return movement;
-    }
-    const response = await apiClient.post<StockMovement>(`/inventory/items/${itemId}/adjust-stock`, {
-      newStock: newStockLevel,
+    const response = await apiClient.post<StockMovement>('/inventory/movements', {
+      inventory_item_id: itemId,
+      movement_type: 'adjustment',
+      new_stock: newStockLevel,
       notes,
     });
     return response.data;
@@ -336,28 +125,11 @@ export const inventoryApi = {
 
   // Suppliers
   getSuppliers: async (): Promise<Supplier[]> => {
-    if (isLovablePreview()) {
-      const { data, error } = await supabase
-        .from('suppliers')
-        .select('*')
-        .order('name');
-      if (error) throw new Error(error.message);
-      return data || [];
-    }
     const response = await apiClient.get<Supplier[]>('/suppliers');
     return response.data;
   },
 
   getActiveSuppliers: async (): Promise<Supplier[]> => {
-    if (isLovablePreview()) {
-      const { data, error } = await supabase
-        .from('suppliers')
-        .select('*')
-        .eq('is_active', true)
-        .order('name');
-      if (error) throw new Error(error.message);
-      return data || [];
-    }
     const response = await apiClient.get<Supplier[]>('/suppliers', {
       params: { active: true },
     });
@@ -365,57 +137,21 @@ export const inventoryApi = {
   },
 
   getSupplier: async (id: string): Promise<Supplier> => {
-    if (isLovablePreview()) {
-      const { data, error } = await supabase
-        .from('suppliers')
-        .select('*')
-        .eq('id', id)
-        .single();
-      if (error) throw new Error(error.message);
-      return data;
-    }
     const response = await apiClient.get<Supplier>(`/suppliers/${id}`);
     return response.data;
   },
 
   createSupplier: async (supplierData: Partial<Supplier>): Promise<Supplier> => {
-    if (isLovablePreview()) {
-      const { data, error } = await supabase
-        .from('suppliers')
-        .insert([supplierData as any])
-        .select()
-        .single();
-      if (error) throw new Error(error.message);
-      return data;
-    }
     const response = await apiClient.post<Supplier>('/suppliers', supplierData);
     return response.data;
   },
 
   updateSupplier: async (id: string, supplierData: Partial<Supplier>): Promise<Supplier> => {
-    if (isLovablePreview()) {
-      const { data, error } = await supabase
-        .from('suppliers')
-        .update(supplierData)
-        .eq('id', id)
-        .select()
-        .single();
-      if (error) throw new Error(error.message);
-      return data;
-    }
-    const response = await apiClient.put<Supplier>(`/suppliers/${id}`, supplierData);
+    const response = await apiClient.patch<Supplier>(`/suppliers/${id}`, supplierData);
     return response.data;
   },
 
   deleteSupplier: async (id: string): Promise<void> => {
-    if (isLovablePreview()) {
-      const { error } = await supabase
-        .from('suppliers')
-        .update({ is_active: false })
-        .eq('id', id);
-      if (error) throw new Error(error.message);
-      return;
-    }
     await apiClient.delete(`/suppliers/${id}`);
   },
 };
