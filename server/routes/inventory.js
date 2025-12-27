@@ -5,36 +5,58 @@ import { authMiddleware, roleMiddleware } from '../middleware/auth.js';
 
 const router = Router();
 
-// Get all inventory items
-router.get('/', authMiddleware, async (req, res) => {
+// Get low stock items
+router.get('/items/low-stock', authMiddleware, async (req, res) => {
   try {
-    const { active_only, low_stock } = req.query;
+    const items = await query(
+      'SELECT * FROM inventory_items WHERE is_active = 1 AND current_stock <= min_stock_level ORDER BY current_stock ASC'
+    );
+    res.json(items);
+  } catch (error) {
+    console.error('Get low stock items error:', error);
+    res.status(500).json({ error: 'Failed to fetch low stock items' });
+  }
+});
+
+// Get all inventory items
+router.get('/items', authMiddleware, async (req, res) => {
+  try {
+    const { active } = req.query;
     
     let sql = 'SELECT * FROM inventory_items WHERE 1=1';
     const params = [];
 
-    if (active_only === 'true') {
+    if (active === 'true') {
       sql += ' AND is_active = 1';
     }
 
     sql += ' ORDER BY name';
 
     const items = await query(sql, params);
-    
-    let result = items;
-    if (low_stock === 'true') {
-      result = items.filter(i => i.current_stock <= i.min_stock_level);
-    }
-
-    res.json(result);
+    res.json(items);
   } catch (error) {
     console.error('Get inventory items error:', error);
     res.status(500).json({ error: 'Failed to fetch inventory items' });
   }
 });
 
+// Get single inventory item
+router.get('/items/:id', authMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const items = await query('SELECT * FROM inventory_items WHERE id = ?', [id]);
+    if (items.length === 0) {
+      return res.status(404).json({ error: 'Inventory item not found' });
+    }
+    res.json(items[0]);
+  } catch (error) {
+    console.error('Get inventory item error:', error);
+    res.status(500).json({ error: 'Failed to fetch inventory item' });
+  }
+});
+
 // Create inventory item
-router.post('/', authMiddleware, roleMiddleware('super_admin', 'manager', 'inventory_officer'), async (req, res) => {
+router.post('/items', authMiddleware, roleMiddleware('super_admin', 'manager', 'inventory_officer'), async (req, res) => {
   try {
     const { name, category, unit, current_stock, min_stock_level, cost_per_unit, supplier, supplier_id } = req.body;
     const id = uuidv4();
@@ -54,16 +76,33 @@ router.post('/', authMiddleware, roleMiddleware('super_admin', 'manager', 'inven
 });
 
 // Update inventory item
-router.patch('/:id', authMiddleware, roleMiddleware('super_admin', 'manager', 'inventory_officer'), async (req, res) => {
+router.patch('/items/:id', authMiddleware, roleMiddleware('super_admin', 'manager', 'inventory_officer'), async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, category, unit, current_stock, min_stock_level, cost_per_unit, supplier, supplier_id, is_active } = req.body;
-
-    await query(
-      `UPDATE inventory_items SET name = ?, category = ?, unit = ?, current_stock = ?, min_stock_level = ?, cost_per_unit = ?, supplier = ?, supplier_id = ?, is_active = ?, updated_at = NOW()
-       WHERE id = ?`,
-      [name, category, unit, current_stock, min_stock_level, cost_per_unit, supplier, supplier_id, is_active, id]
-    );
+    const updates = req.body;
+    
+    // Build dynamic update query
+    const fields = [];
+    const values = [];
+    
+    const allowedFields = ['name', 'category', 'unit', 'current_stock', 'min_stock_level', 'cost_per_unit', 'supplier', 'supplier_id', 'is_active'];
+    
+    for (const field of allowedFields) {
+      if (updates[field] !== undefined) {
+        fields.push(`${field} = ?`);
+        values.push(updates[field]);
+      }
+    }
+    
+    if (fields.length > 0) {
+      fields.push('updated_at = NOW()');
+      values.push(id);
+      
+      await query(
+        `UPDATE inventory_items SET ${fields.join(', ')} WHERE id = ?`,
+        values
+      );
+    }
 
     const items = await query('SELECT * FROM inventory_items WHERE id = ?', [id]);
     res.json(items[0]);
@@ -74,7 +113,7 @@ router.patch('/:id', authMiddleware, roleMiddleware('super_admin', 'manager', 'i
 });
 
 // Delete (soft) inventory item
-router.delete('/:id', authMiddleware, roleMiddleware('super_admin', 'manager', 'inventory_officer'), async (req, res) => {
+router.delete('/items/:id', authMiddleware, roleMiddleware('super_admin', 'manager', 'inventory_officer'), async (req, res) => {
   try {
     const { id } = req.params;
     await query('UPDATE inventory_items SET is_active = 0 WHERE id = ?', [id]);
@@ -88,7 +127,7 @@ router.delete('/:id', authMiddleware, roleMiddleware('super_admin', 'manager', '
 // Stock movement
 router.post('/movements', authMiddleware, roleMiddleware('super_admin', 'manager', 'inventory_officer'), async (req, res) => {
   try {
-    const { inventory_item_id, movement_type, quantity, notes } = req.body;
+    const { inventory_item_id, movement_type, quantity, new_stock, notes } = req.body;
 
     // Get current stock
     const items = await query('SELECT current_stock FROM inventory_items WHERE id = ?', [inventory_item_id]);
@@ -96,32 +135,37 @@ router.post('/movements', authMiddleware, roleMiddleware('super_admin', 'manager
       return res.status(404).json({ error: 'Inventory item not found' });
     }
 
-    const previousStock = items[0].current_stock;
-    let newStock;
+    const previousStock = parseFloat(items[0].current_stock);
+    let finalNewStock;
 
     if (movement_type === 'in') {
-      newStock = previousStock + quantity;
+      finalNewStock = previousStock + quantity;
     } else if (movement_type === 'out') {
-      newStock = previousStock - quantity;
+      finalNewStock = Math.max(0, previousStock - quantity);
+    } else if (movement_type === 'adjustment') {
+      finalNewStock = new_stock !== undefined ? new_stock : quantity;
     } else {
-      newStock = quantity; // adjustment
+      return res.status(400).json({ error: 'Invalid movement type' });
     }
 
     // Create movement record
     const movementId = uuidv4();
+    const movementQuantity = movement_type === 'adjustment' ? Math.abs(finalNewStock - previousStock) : quantity;
+    
     await query(
       `INSERT INTO stock_movements (id, inventory_item_id, movement_type, quantity, previous_stock, new_stock, notes, created_by, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
-      [movementId, inventory_item_id, movement_type, quantity, previousStock, newStock, notes || null, req.user.id]
+      [movementId, inventory_item_id, movement_type, movementQuantity, previousStock, finalNewStock, notes || null, req.user.id]
     );
 
     // Update stock
     await query(
       'UPDATE inventory_items SET current_stock = ?, updated_at = NOW() WHERE id = ?',
-      [newStock, inventory_item_id]
+      [finalNewStock, inventory_item_id]
     );
 
-    res.json({ success: true, newStock });
+    const movement = await query('SELECT * FROM stock_movements WHERE id = ?', [movementId]);
+    res.json(movement[0]);
   } catch (error) {
     console.error('Stock movement error:', error);
     res.status(500).json({ error: 'Failed to record stock movement' });
@@ -131,14 +175,14 @@ router.post('/movements', authMiddleware, roleMiddleware('super_admin', 'manager
 // Get stock movements
 router.get('/movements', authMiddleware, async (req, res) => {
   try {
-    const { inventory_item_id } = req.query;
+    const { itemId } = req.query;
     
     let sql = 'SELECT * FROM stock_movements WHERE 1=1';
     const params = [];
 
-    if (inventory_item_id) {
+    if (itemId) {
       sql += ' AND inventory_item_id = ?';
-      params.push(inventory_item_id);
+      params.push(itemId);
     }
 
     sql += ' ORDER BY created_at DESC LIMIT 100';

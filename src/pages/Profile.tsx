@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Loader2, Camera, User } from 'lucide-react';
 import { toast } from 'sonner';
-import { supabase } from '@/integrations/supabase/client';
+import apiClient from '@/lib/api/client';
 
 const Profile = () => {
   const { user, refreshUser } = useAuth();
@@ -27,13 +27,7 @@ const Profile = () => {
 
     setIsUpdating(true);
     try {
-      const { error } = await supabase
-        .from('profiles')
-        .update({ full_name: fullName.trim() })
-        .eq('id', user.id);
-
-      if (error) throw error;
-
+      await apiClient.patch(`/profiles/${user.id}`, { full_name: fullName.trim() });
       await refreshUser();
       toast.success('Profile updated successfully');
     } catch (error) {
@@ -65,28 +59,15 @@ const Profile = () => {
 
     setIsUploadingAvatar(true);
     try {
-      const fileExt = file.name.split('.').pop();
-      const filePath = `${user.id}/avatar.${fileExt}`;
-
-      // Upload to storage
-      const { error: uploadError } = await supabase.storage
-        .from('avatars')
-        .upload(filePath, file, { upsert: true });
-
-      if (uploadError) throw uploadError;
-
-      // Get public URL
-      const { data: { publicUrl } } = supabase.storage
-        .from('avatars')
-        .getPublicUrl(filePath);
-
-      // Update profile with avatar URL (add cache buster)
-      const { error: updateError } = await supabase
-        .from('profiles')
-        .update({ avatar_url: `${publicUrl}?t=${Date.now()}` })
-        .eq('id', user.id);
-
-      if (updateError) throw updateError;
+      // Upload avatar via API
+      const formData = new FormData();
+      formData.append('avatar', file);
+      
+      const response = await apiClient.post<{ url: string }>(`/profiles/${user.id}/avatar`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
 
       await refreshUser();
       toast.success('Avatar updated successfully');

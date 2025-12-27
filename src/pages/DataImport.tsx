@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { toast } from "sonner";
 import { Loader2, Database, CheckCircle2, Upload } from "lucide-react";
 import { Navigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
+import apiClient from "@/lib/api/client";
 
 // CSV data imports
 import menuCategoriesCSV from "@/data/menu_categories.csv?raw";
@@ -75,9 +75,9 @@ export default function DataImport() {
       const categoriesData = parseCSV(menuCategoriesCSV).map(row => ({
         id: parseValue(row.id, 'uuid'),
         name: parseValue(row.name, 'string'),
+        category_type: parseValue(row.category_type, 'string') || 'food',
         sort_order: parseValue(row.sort_order, 'number') || 0,
         is_active: parseValue(row.is_active, 'boolean') ?? true,
-        created_at: parseValue(row.created_at, 'string') || new Date().toISOString()
       }));
 
       const inventoryData = parseCSV(inventoryItemsCSV).map(row => ({
@@ -90,8 +90,6 @@ export default function DataImport() {
         cost_per_unit: parseValue(row.cost_per_unit, 'number'),
         supplier: parseValue(row.supplier, 'string'),
         is_active: parseValue(row.is_active, 'boolean') ?? true,
-        created_at: parseValue(row.created_at, 'string') || new Date().toISOString(),
-        updated_at: parseValue(row.updated_at, 'string') || new Date().toISOString(),
         supplier_id: parseValue(row.supplier_id, 'uuid')
       }));
 
@@ -105,8 +103,6 @@ export default function DataImport() {
         image_url: parseValue(row.image_url, 'string'),
         is_available: parseValue(row.is_available, 'boolean') ?? true,
         is_active: parseValue(row.is_active, 'boolean') ?? true,
-        created_at: parseValue(row.created_at, 'string') || new Date().toISOString(),
-        updated_at: parseValue(row.updated_at, 'string') || new Date().toISOString(),
         inventory_item_id: parseValue(row.inventory_item_id, 'uuid'),
         track_inventory: parseValue(row.track_inventory, 'boolean') ?? false
       }));
@@ -125,8 +121,6 @@ export default function DataImport() {
         timezone: parseValue(row.timezone, 'string'),
         receipt_footer: parseValue(row.receipt_footer, 'string'),
         receipt_show_logo: parseValue(row.receipt_show_logo, 'boolean') ?? false,
-        created_at: parseValue(row.created_at, 'string') || new Date().toISOString(),
-        updated_at: parseValue(row.updated_at, 'string') || new Date().toISOString()
       }));
 
       console.log('Parsed data:', {
@@ -136,37 +130,15 @@ export default function DataImport() {
         settings: settingsData.length
       });
 
-      // Get session for auth
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        throw new Error("Not authenticated");
-      }
+      // Call the REST API
+      const response = await apiClient.post<{ results: ImportResults }>('/data/import', {
+        menu_categories: categoriesData,
+        inventory_items: inventoryData,
+        menu_items: menuData,
+        restaurant_settings: settingsData
+      });
 
-      // Call the edge function
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/import-data`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${session.access_token}`
-          },
-          body: JSON.stringify({
-            menu_categories: categoriesData,
-            inventory_items: inventoryData,
-            menu_items: menuData,
-            restaurant_settings: settingsData
-          })
-        }
-      );
-
-      const data = await response.json();
-      
-      if (!response.ok) {
-        throw new Error(data.error || "Import failed");
-      }
-
-      setResults(data.results);
+      setResults(response.data.results);
       toast.success("Data import completed!");
     } catch (error) {
       console.error("Import error:", error);
