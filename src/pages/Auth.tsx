@@ -30,7 +30,7 @@ const Auth = () => {
 
   useEffect(() => {
     if (isAuthenticated) {
-      navigate('/dashboard');
+      navigate('/dashboard', { replace: true });
     }
   }, [isAuthenticated, navigate]);
 
@@ -93,7 +93,10 @@ const Auth = () => {
             title: 'Welcome back!',
             description: 'You have successfully logged in.',
           });
-          navigate('/dashboard');
+          // Small delay to allow state to propagate before navigation
+          setTimeout(() => {
+            navigate('/dashboard', { replace: true });
+          }, 100);
         }
       }
     } finally {
