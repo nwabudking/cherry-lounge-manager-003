@@ -17,6 +17,7 @@ import settingsRoutes from './routes/settings.js';
 import profilesRoutes from './routes/profiles.js';
 import migrationRoutes from './routes/migration.js';
 import bootstrapRoutes from './routes/bootstrap.js';
+import dataRoutes from './routes/data.js';
 
 import { getPool } from './db/pool.js';
 import { verifyToken } from './middleware/auth.js';
@@ -37,6 +38,10 @@ const io = new Server(server, {
 // Middleware
 app.use(cors());
 app.use(express.json());
+
+// Serve uploaded files
+const uploadsPath = join(__dirname, 'uploads');
+app.use('/uploads', express.static(uploadsPath));
 
 // Store connected clients
 const connectedClients = new Map();
@@ -86,6 +91,7 @@ app.use('/api/settings', settingsRoutes);
 app.use('/api/profiles', profilesRoutes);
 app.use('/api/migration', migrationRoutes);
 app.use('/api/bootstrap', bootstrapRoutes);
+app.use('/api/data', dataRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
