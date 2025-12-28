@@ -76,13 +76,32 @@ serve(async (req) => {
       .eq("user_id", requestingUser.id)
       .single();
 
-    const allowedRoles = ["super_admin", "manager"];
+    const allowedRoles = ["super_admin", "admin", "manager"];
     if (!roleData || !allowedRoles.includes(roleData.role)) {
       return new Response(JSON.stringify({ error: "Insufficient permissions" }), {
         status: 403,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
+    const requestingUserRole = roleData.role;
+
+    // Role hierarchy helper - returns roles that the requesting user can assign
+    const getAssignableRoles = (userRole: string): string[] => {
+      switch (userRole) {
+        case "super_admin":
+          // Super admin can assign all roles
+          return ["super_admin", "admin", "manager", "cashier", "bar_staff", "kitchen_staff", "inventory_officer", "accountant"];
+        case "admin":
+          // Admin can assign manager and below, but NOT super_admin or admin
+          return ["manager", "cashier", "bar_staff", "kitchen_staff", "inventory_officer", "accountant"];
+        case "manager":
+          // Manager can assign staff roles only, NOT admin or super_admin
+          return ["cashier", "bar_staff", "kitchen_staff", "inventory_officer", "accountant"];
+        default:
+          return [];
+      }
+    };
 
     const body: CreateUserRequest = await req.json();
     const { action } = body;
@@ -93,6 +112,17 @@ serve(async (req) => {
       if (!email || !password) {
         return new Response(JSON.stringify({ error: "Email and password required" }), {
           status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Check if requesting user can assign this role
+      const assignableRoles = getAssignableRoles(requestingUserRole);
+      if (role && !assignableRoles.includes(role)) {
+        return new Response(JSON.stringify({ 
+          error: `You don't have permission to assign the ${role} role` 
+        }), {
+          status: 403,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
@@ -175,6 +205,42 @@ serve(async (req) => {
           status: 400,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
+      }
+
+      // Check role assignment permissions
+      if (role) {
+        const assignableRoles = getAssignableRoles(requestingUserRole);
+        if (!assignableRoles.includes(role)) {
+          return new Response(JSON.stringify({ 
+            error: `You don't have permission to assign the ${role} role` 
+          }), {
+            status: 403,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        // Check if trying to modify a user with higher/equal role
+        const { data: targetRoleData } = await supabaseAdmin
+          .from("user_roles")
+          .select("role")
+          .eq("user_id", userId)
+          .single();
+
+        if (targetRoleData) {
+          const roleHierarchy = ["super_admin", "admin", "manager", "cashier", "bar_staff", "kitchen_staff", "inventory_officer", "accountant"];
+          const requestingRoleIndex = roleHierarchy.indexOf(requestingUserRole);
+          const targetRoleIndex = roleHierarchy.indexOf(targetRoleData.role);
+          
+          // Can't modify users with higher or equal role (except super_admin can modify everyone)
+          if (requestingUserRole !== "super_admin" && targetRoleIndex <= requestingRoleIndex) {
+            return new Response(JSON.stringify({ 
+              error: `You don't have permission to modify this user's role` 
+            }), {
+              status: 403,
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+            });
+          }
+        }
       }
 
       // Update profile

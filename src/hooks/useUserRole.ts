@@ -1,7 +1,7 @@
 import { useAuth, AppRole } from '@/contexts/AuthContext';
 import { useMemo } from 'react';
 
-export type PrivilegedRole = 'super_admin' | 'manager';
+export type PrivilegedRole = 'super_admin' | 'admin' | 'manager';
 export type RestrictedRole = 'cashier' | 'bar_staff' | 'kitchen_staff' | 'inventory_officer' | 'accountant';
 
 interface RolePermissions {
@@ -16,9 +16,9 @@ interface RolePermissions {
   isPrivileged: boolean;
 }
 
-const PRIVILEGED_ROLES: AppRole[] = ['super_admin', 'manager'];
-const INVENTORY_ROLES: AppRole[] = ['super_admin', 'manager', 'inventory_officer'];
-const SALES_VIEW_ROLES: AppRole[] = ['super_admin', 'manager', 'accountant'];
+const PRIVILEGED_ROLES: AppRole[] = ['super_admin', 'admin', 'manager'];
+const INVENTORY_ROLES: AppRole[] = ['super_admin', 'admin', 'manager', 'inventory_officer'];
+const SALES_VIEW_ROLES: AppRole[] = ['super_admin', 'admin', 'manager', 'accountant'];
 
 export const useUserRole = () => {
   const { user, role, isAuthenticated } = useAuth();
@@ -47,7 +47,7 @@ export const useUserRole = () => {
       canViewAllSales: canViewAllSales,
       canViewAllInventory: canManageInventory,
       canViewAllStaff: isPrivileged,
-      canManageStaff: role === 'super_admin',
+      canManageStaff: role === 'super_admin' || role === 'admin' || role === 'manager',
       canManageSettings: isPrivileged,
       canViewReports: isPrivileged || role === 'accountant',
       canManageInventory,
