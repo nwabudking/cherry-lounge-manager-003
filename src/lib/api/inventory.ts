@@ -1,5 +1,6 @@
 import { supabase } from '@/integrations/supabase/client';
 import type { TablesInsert, TablesUpdate } from '@/integrations/supabase/types';
+import { duplicateCheck } from '@/lib/utils/duplicateCheck';
 
 export interface InventoryItem {
   id: string;
@@ -98,6 +99,14 @@ export const inventoryApi = {
   },
 
   createItem: async (itemData: Partial<InventoryItem>): Promise<InventoryItem> => {
+    // Check for duplicates before insert
+    if (itemData.name) {
+      const dupCheck = await duplicateCheck.checkInventoryItem(itemData.name);
+      if (dupCheck.isDuplicate) {
+        throw new Error(duplicateCheck.getDuplicateErrorMessage('inventory item', dupCheck.existingName));
+      }
+    }
+
     const insertData: TablesInsert<'inventory_items'> = {
       name: itemData.name || 'Unnamed Item',
       category: itemData.category,
@@ -117,11 +126,24 @@ export const inventoryApi = {
       .select()
       .single();
     
-    if (error) throw new Error(error.message);
+    if (error) {
+      if (duplicateCheck.isDuplicateError(error)) {
+        throw new Error(duplicateCheck.getDuplicateErrorMessage('inventory item', itemData.name));
+      }
+      throw new Error(error.message);
+    }
     return data as InventoryItem;
   },
 
   updateItem: async (id: string, itemData: Partial<InventoryItem>): Promise<InventoryItem> => {
+    // Check for duplicates before update (exclude current item)
+    if (itemData.name) {
+      const dupCheck = await duplicateCheck.checkInventoryItem(itemData.name, id);
+      if (dupCheck.isDuplicate) {
+        throw new Error(duplicateCheck.getDuplicateErrorMessage('inventory item', dupCheck.existingName));
+      }
+    }
+
     const updateData: TablesUpdate<'inventory_items'> = {};
     if (itemData.name !== undefined) updateData.name = itemData.name;
     if (itemData.category !== undefined) updateData.category = itemData.category;
@@ -141,7 +163,12 @@ export const inventoryApi = {
       .select()
       .single();
     
-    if (error) throw new Error(error.message);
+    if (error) {
+      if (duplicateCheck.isDuplicateError(error)) {
+        throw new Error(duplicateCheck.getDuplicateErrorMessage('inventory item', itemData.name));
+      }
+      throw new Error(error.message);
+    }
     return data as InventoryItem;
   },
 
@@ -314,6 +341,14 @@ export const inventoryApi = {
   },
 
   createSupplier: async (supplierData: Partial<Supplier>): Promise<Supplier> => {
+    // Check for duplicates before insert
+    if (supplierData.name) {
+      const dupCheck = await duplicateCheck.checkSupplier(supplierData.name);
+      if (dupCheck.isDuplicate) {
+        throw new Error(duplicateCheck.getDuplicateErrorMessage('supplier', dupCheck.existingName));
+      }
+    }
+
     const insertData: TablesInsert<'suppliers'> = {
       name: supplierData.name || 'Unnamed Supplier',
       contact_person: supplierData.contact_person,
@@ -330,11 +365,24 @@ export const inventoryApi = {
       .select()
       .single();
     
-    if (error) throw new Error(error.message);
+    if (error) {
+      if (duplicateCheck.isDuplicateError(error)) {
+        throw new Error(duplicateCheck.getDuplicateErrorMessage('supplier', supplierData.name));
+      }
+      throw new Error(error.message);
+    }
     return data as Supplier;
   },
 
   updateSupplier: async (id: string, supplierData: Partial<Supplier>): Promise<Supplier> => {
+    // Check for duplicates before update
+    if (supplierData.name) {
+      const dupCheck = await duplicateCheck.checkSupplier(supplierData.name, id);
+      if (dupCheck.isDuplicate) {
+        throw new Error(duplicateCheck.getDuplicateErrorMessage('supplier', dupCheck.existingName));
+      }
+    }
+
     const updateData: TablesUpdate<'suppliers'> = {};
     if (supplierData.name !== undefined) updateData.name = supplierData.name;
     if (supplierData.contact_person !== undefined) updateData.contact_person = supplierData.contact_person;
@@ -351,7 +399,12 @@ export const inventoryApi = {
       .select()
       .single();
     
-    if (error) throw new Error(error.message);
+    if (error) {
+      if (duplicateCheck.isDuplicateError(error)) {
+        throw new Error(duplicateCheck.getDuplicateErrorMessage('supplier', supplierData.name));
+      }
+      throw new Error(error.message);
+    }
     return data as Supplier;
   },
 

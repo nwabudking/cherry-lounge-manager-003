@@ -1,5 +1,6 @@
 import { supabase } from '@/integrations/supabase/client';
 import type { TablesInsert, TablesUpdate } from '@/integrations/supabase/types';
+import { duplicateCheck } from '@/lib/utils/duplicateCheck';
 
 export interface MenuCategory {
   id: string;
@@ -63,6 +64,14 @@ export const menuApi = {
   },
 
   createCategory: async (categoryData: Partial<MenuCategory>): Promise<MenuCategory> => {
+    // Check for duplicates before insert
+    if (categoryData.name) {
+      const dupCheck = await duplicateCheck.checkCategory(categoryData.name);
+      if (dupCheck.isDuplicate) {
+        throw new Error(duplicateCheck.getDuplicateErrorMessage('category', dupCheck.existingName));
+      }
+    }
+
     const insertData: TablesInsert<'menu_categories'> = {
       name: categoryData.name || 'Unnamed Category',
       category_type: categoryData.category_type,
@@ -76,11 +85,24 @@ export const menuApi = {
       .select()
       .single();
     
-    if (error) throw new Error(error.message);
+    if (error) {
+      if (duplicateCheck.isDuplicateError(error)) {
+        throw new Error(duplicateCheck.getDuplicateErrorMessage('category', categoryData.name));
+      }
+      throw new Error(error.message);
+    }
     return data as MenuCategory;
   },
 
   updateCategory: async (id: string, categoryData: Partial<MenuCategory>): Promise<MenuCategory> => {
+    // Check for duplicates before update
+    if (categoryData.name) {
+      const dupCheck = await duplicateCheck.checkCategory(categoryData.name, id);
+      if (dupCheck.isDuplicate) {
+        throw new Error(duplicateCheck.getDuplicateErrorMessage('category', dupCheck.existingName));
+      }
+    }
+
     const updateData: TablesUpdate<'menu_categories'> = {};
     if (categoryData.name !== undefined) updateData.name = categoryData.name;
     if (categoryData.category_type !== undefined) updateData.category_type = categoryData.category_type;
@@ -94,7 +116,12 @@ export const menuApi = {
       .select()
       .single();
     
-    if (error) throw new Error(error.message);
+    if (error) {
+      if (duplicateCheck.isDuplicateError(error)) {
+        throw new Error(duplicateCheck.getDuplicateErrorMessage('category', categoryData.name));
+      }
+      throw new Error(error.message);
+    }
     return data as MenuCategory;
   },
 
@@ -148,6 +175,14 @@ export const menuApi = {
   },
 
   createMenuItem: async (itemData: Partial<MenuItem>): Promise<MenuItem> => {
+    // Check for duplicates before insert
+    if (itemData.name) {
+      const dupCheck = await duplicateCheck.checkMenuItem(itemData.name);
+      if (dupCheck.isDuplicate) {
+        throw new Error(duplicateCheck.getDuplicateErrorMessage('menu item', dupCheck.existingName));
+      }
+    }
+
     const insertData: TablesInsert<'menu_items'> = {
       name: itemData.name || 'Unnamed Item',
       price: itemData.price ?? 0,
@@ -167,11 +202,24 @@ export const menuApi = {
       .select()
       .single();
     
-    if (error) throw new Error(error.message);
+    if (error) {
+      if (duplicateCheck.isDuplicateError(error)) {
+        throw new Error(duplicateCheck.getDuplicateErrorMessage('menu item', itemData.name));
+      }
+      throw new Error(error.message);
+    }
     return data as MenuItem;
   },
 
   updateMenuItem: async (id: string, itemData: Partial<MenuItem>): Promise<MenuItem> => {
+    // Check for duplicates before update
+    if (itemData.name) {
+      const dupCheck = await duplicateCheck.checkMenuItem(itemData.name, id);
+      if (dupCheck.isDuplicate) {
+        throw new Error(duplicateCheck.getDuplicateErrorMessage('menu item', dupCheck.existingName));
+      }
+    }
+
     const updateData: TablesUpdate<'menu_items'> = {};
     if (itemData.name !== undefined) updateData.name = itemData.name;
     if (itemData.price !== undefined) updateData.price = itemData.price;
@@ -191,7 +239,12 @@ export const menuApi = {
       .select()
       .single();
     
-    if (error) throw new Error(error.message);
+    if (error) {
+      if (duplicateCheck.isDuplicateError(error)) {
+        throw new Error(duplicateCheck.getDuplicateErrorMessage('menu item', itemData.name));
+      }
+      throw new Error(error.message);
+    }
     return data as MenuItem;
   },
 
