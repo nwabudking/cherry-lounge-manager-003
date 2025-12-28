@@ -1,6 +1,4 @@
-import apiClient from './client';
 import { supabase } from '@/integrations/supabase/client';
-import { assertDatabaseConfigured, getEnvironmentConfig, useMySQLForReads, useSupabaseForReads } from '@/lib/db/environment';
 
 export interface StaffMember {
   id: string;
@@ -30,7 +28,7 @@ export interface UpdateStaffData {
 const ensureArray = <T,>(value: unknown): T[] => {
   if (Array.isArray(value)) return value as T[];
   if (value && typeof value === 'object') {
-    const v = value as any;
+    const v = value as Record<string, unknown>;
     const candidate = v.data ?? v.staff ?? v.results ?? v.rows;
     if (Array.isArray(candidate)) return candidate as T[];
   }
@@ -44,191 +42,119 @@ async function getStaffFromCloud(): Promise<StaffMember[]> {
     .select('id,email,full_name,avatar_url,created_at,updated_at');
 
   if (profilesRes.error) throw profilesRes.error;
-  const profiles = ensureArray<any>(profilesRes.data);
+  const profiles = ensureArray<Record<string, unknown>>(profilesRes.data);
 
   // Roles (admins see all, others see own due to policies)
   const rolesRes = await supabase.from('user_roles').select('user_id,role');
   if (rolesRes.error) throw rolesRes.error;
-  const roles = ensureArray<any>(rolesRes.data);
+  const roles = ensureArray<Record<string, unknown>>(rolesRes.data);
 
-  const roleByUserId = roles.reduce((acc: Record<string, string>, r: any) => {
-    if (r?.user_id) acc[r.user_id] = r.role;
+  const roleByUserId = roles.reduce((acc: Record<string, string>, r) => {
+    if (r?.user_id) acc[r.user_id as string] = String(r.role || 'cashier');
     return acc;
   }, {});
 
-  return profiles.map((p: any) => ({
-    id: p.id,
-    email: p.email,
-    full_name: p.full_name,
-    avatar_url: p.avatar_url,
-    role: roleByUserId[p.id] || 'cashier',
+  return profiles.map((p): StaffMember => ({
+    id: p.id as string,
+    email: p.email as string,
+    full_name: p.full_name as string | null,
+    avatar_url: p.avatar_url as string | null,
+    role: String(roleByUserId[p.id as string] || 'cashier'),
     is_active: true,
-    created_at: p.created_at,
-    updated_at: p.updated_at,
+    created_at: (p.created_at as string) || new Date().toISOString(),
+    updated_at: (p.updated_at as string) || new Date().toISOString(),
   }));
 }
 
 export const staffApi = {
   getStaff: async (): Promise<StaffMember[]> => {
-    assertDatabaseConfigured();
-
-    if (useSupabaseForReads()) {
-      try {
-        return await getStaffFromCloud();
-      } catch {
-        // fall through to REST if available
-      }
-    }
-
-    if (useMySQLForReads()) {
-      const response = await apiClient.get<StaffMember[]>('/staff');
-      return ensureArray<StaffMember>(response.data);
-    }
-
-    return [];
+    return await getStaffFromCloud();
   },
 
   getActiveStaff: async (): Promise<StaffMember[]> => {
-    assertDatabaseConfigured();
-
-    if (useSupabaseForReads()) {
-      try {
-        // Cloud currently has no inactive staff concept; return the list.
-        return await getStaffFromCloud();
-      } catch {
-        // fall through to REST if available
-      }
-    }
-
-    if (useMySQLForReads()) {
-      const response = await apiClient.get<StaffMember[]>('/staff', {
-        params: { active: true },
-      });
-      return ensureArray<StaffMember>(response.data);
-    }
-
-    return [];
+    return await getStaffFromCloud();
   },
 
   getStaffMember: async (id: string): Promise<StaffMember> => {
-    assertDatabaseConfigured();
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('id,email,full_name,avatar_url,created_at,updated_at')
+      .eq('id', id)
+      .maybeSingle();
 
-    if (useSupabaseForReads()) {
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('id,email,full_name,avatar_url,created_at,updated_at')
-        .eq('id', id)
-        .maybeSingle();
+    if (profileError) throw profileError;
+    if (!profile) throw new Error('Staff member not found');
 
-      if (profileError) throw profileError;
-      if (!profile) throw new Error('Staff member not found');
+    const { data: roleRow } = await supabase
+      .from('user_roles')
+      .select('role')
+      .eq('user_id', id)
+      .maybeSingle();
 
-      const { data: roleRow } = await supabase
-        .from('user_roles')
-        .select('role')
-        .eq('user_id', id)
-        .maybeSingle();
-
-      return {
-        id: profile.id,
-        email: profile.email || '',
-        full_name: profile.full_name,
-        avatar_url: profile.avatar_url,
-        role: (roleRow as any)?.role || 'cashier',
-        is_active: true,
-        created_at: profile.created_at || new Date().toISOString(),
-        updated_at: profile.updated_at || new Date().toISOString(),
-      };
-    }
-
-    const response = await apiClient.get<StaffMember>(`/staff/${id}`);
-    return response.data;
+    return {
+      id: profile.id,
+      email: profile.email || '',
+      full_name: profile.full_name,
+      avatar_url: profile.avatar_url,
+      role: (roleRow as { role: string } | null)?.role || 'cashier',
+      is_active: true,
+      created_at: profile.created_at || new Date().toISOString(),
+      updated_at: profile.updated_at || new Date().toISOString(),
+    };
   },
 
   createStaff: async (data: CreateStaffData): Promise<StaffMember> => {
-    assertDatabaseConfigured();
-
-    const cfg = getEnvironmentConfig();
-    if (cfg.supabaseAvailable && cfg.mode !== 'mysql') {
-      const { data: result, error } = await supabase.functions.invoke('manage-staff', {
-        body: {
-          action: 'create',
-          email: data.email,
-          password: data.password,
-          fullName: data.full_name,
-          role: data.role,
-        },
-      });
-      if (error) throw new Error(error.message);
-      if (!result?.success || !result?.user?.id) throw new Error(result?.error || 'Failed to create staff');
-
-      return {
-        id: result.user.id,
+    const { data: result, error } = await supabase.functions.invoke('manage-staff', {
+      body: {
+        action: 'create',
         email: data.email,
-        full_name: data.full_name,
-        avatar_url: null,
+        password: data.password,
+        fullName: data.full_name,
         role: data.role,
-        is_active: true,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      };
-    }
+      },
+    });
+    if (error) throw new Error(error.message);
+    if (!result?.success || !result?.user?.id) throw new Error(result?.error || 'Failed to create staff');
 
-    const response = await apiClient.post<StaffMember>('/staff', data);
-    return response.data;
+    return {
+      id: result.user.id,
+      email: data.email,
+      full_name: data.full_name,
+      avatar_url: null,
+      role: data.role,
+      is_active: true,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
   },
 
   updateStaff: async (id: string, data: UpdateStaffData): Promise<StaffMember> => {
-    assertDatabaseConfigured();
+    const { error } = await supabase.functions.invoke('manage-staff', {
+      body: {
+        action: 'update',
+        userId: id,
+        fullName: data.full_name,
+        role: data.role,
+      },
+    });
+    if (error) throw new Error(error.message);
 
-    const cfg = getEnvironmentConfig();
-    if (cfg.supabaseAvailable && cfg.mode !== 'mysql') {
-      const { error } = await supabase.functions.invoke('manage-staff', {
-        body: {
-          action: 'update',
-          userId: id,
-          fullName: data.full_name,
-          role: data.role,
-        },
-      });
-      if (error) throw new Error(error.message);
-
-      // Return the updated row by refetching
-      return await staffApi.getStaffMember(id);
-    }
-
-    const response = await apiClient.patch<StaffMember>(`/staff/${id}`, data);
-    return response.data;
+    // Return the updated row by refetching
+    return await staffApi.getStaffMember(id);
   },
 
   deleteStaff: async (id: string): Promise<void> => {
-    assertDatabaseConfigured();
-
-    const cfg = getEnvironmentConfig();
-    if (cfg.supabaseAvailable && cfg.mode !== 'mysql') {
-      const { error } = await supabase.functions.invoke('manage-staff', {
-        body: { action: 'delete', userId: id },
-      });
-      if (error) throw new Error(error.message);
-      return;
-    }
-
-    await apiClient.delete(`/staff/${id}`);
+    const { error } = await supabase.functions.invoke('manage-staff', {
+      body: { action: 'delete', userId: id },
+    });
+    if (error) throw new Error(error.message);
   },
 
   resetPassword: async (id: string, newPassword: string): Promise<void> => {
-    assertDatabaseConfigured();
-
-    const cfg = getEnvironmentConfig();
-    if (cfg.supabaseAvailable && cfg.mode !== 'mysql') {
-      const { error } = await supabase.functions.invoke('reset-staff-password', {
-        body: { userId: id, newPassword },
-      });
-      if (error) throw new Error(error.message);
-      return;
-    }
-
-    await apiClient.post(`/staff/${id}/reset-password`, { newPassword });
+    const { error } = await supabase.functions.invoke('reset-staff-password', {
+      body: { userId: id, newPassword },
+    });
+    if (error) throw new Error(error.message);
   },
 
   updateRole: async (id: string, role: string): Promise<StaffMember> => {
@@ -236,19 +162,12 @@ export const staffApi = {
   },
 
   getProfiles: async (): Promise<{ id: string; full_name: string | null; email: string | null }[]> => {
-    assertDatabaseConfigured();
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('id,full_name,email')
+      .order('full_name', { ascending: true });
 
-    if (useSupabaseForReads()) {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('id,full_name,email')
-        .order('full_name', { ascending: true });
-
-      if (!error) return ensureArray<any>(data);
-      // Fall through to REST if available
-    }
-
-    const response = await apiClient.get('/profiles');
-    return ensureArray<any>(response.data);
+    if (error) throw error;
+    return ensureArray<{ id: string; full_name: string | null; email: string | null }>(data);
   },
 };
