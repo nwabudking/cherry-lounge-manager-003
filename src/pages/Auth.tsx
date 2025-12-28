@@ -9,7 +9,9 @@ import { useToast } from '@/hooks/use-toast';
 import { Eye, EyeOff, Loader2, Shield, AlertCircle } from 'lucide-react';
 import { z } from 'zod';
 import logoImage from '@/assets/logo.png';
+import { getEnvironmentConfig } from '@/lib/db/environment';
 import apiClient from '@/lib/api/client';
+import { supabase } from '@/integrations/supabase/client';
 
 const emailSchema = z.string().email('Please enter a valid email address');
 const passwordSchema = z.string().min(6, 'Password must be at least 6 characters');
@@ -33,6 +35,7 @@ const Auth = () => {
   const { signIn, isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const config = getEnvironmentConfig();
 
   // Check system status on mount
   useEffect(() => {
@@ -47,16 +50,24 @@ const Auth = () => {
 
   const checkSystemStatus = async () => {
     setIsCheckingStatus(true);
-    try {
-      const response = await apiClient.get('/bootstrap/status');
-      setSystemStatus(response.data);
-    } catch (error) {
-      console.error('Failed to check system status:', error);
-      // Default to assuming system needs setup if we can't check
-      setSystemStatus({ initialized: false, hasSuperAdmin: false, needsSetup: true });
-    } finally {
-      setIsCheckingStatus(false);
+    
+    // For Supabase mode - RLS blocks unauthenticated queries
+    // Default to login mode since setup requires backend coordination
+    if (config.mode === 'supabase' || config.supabaseAvailable) {
+      // In Supabase/Lovable mode, always show login (super_admin created via Supabase dashboard or migration)
+      setSystemStatus({ initialized: true, hasSuperAdmin: true, needsSetup: false });
+    } else {
+      // For MySQL/Docker mode, use REST API to check if setup is needed
+      try {
+        const response = await apiClient.get('/bootstrap/status');
+        setSystemStatus(response.data);
+      } catch (error) {
+        console.error('Failed to check system status:', error);
+        setSystemStatus({ initialized: false, hasSuperAdmin: false, needsSetup: true });
+      }
     }
+    
+    setIsCheckingStatus(false);
   };
 
   const validate = (isSetup: boolean = false) => {
@@ -89,24 +100,61 @@ const Auth = () => {
     setIsLoading(true);
     
     try {
-      const response = await apiClient.post('/bootstrap/setup-admin', {
-        email,
-        password,
-        full_name: fullName,
-      });
+      if (config.mode === 'supabase' || config.supabaseAvailable) {
+        // For Supabase: Sign up with Supabase Auth
+        const { data, error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            emailRedirectTo: `${window.location.origin}/`,
+            data: { full_name: fullName },
+          },
+        });
 
-      if (response.data.success) {
+        if (error) throw error;
+        if (!data.user) throw new Error('Failed to create account');
+
+        // Create profile
+        await supabase.from('profiles').insert({
+          id: data.user.id,
+          email,
+          full_name: fullName,
+        });
+
+        // Assign super_admin role
+        await supabase.from('user_roles').insert({
+          user_id: data.user.id,
+          role: 'super_admin',
+        });
+
         toast({
           title: 'Setup Complete!',
-          description: 'Super admin account created. Please sign in.',
+          description: 'Super admin account created. You are now logged in.',
         });
-        
-        // Refresh status and switch to login mode
+
+        // Refresh status
         await checkSystemStatus();
-        setPassword(''); // Clear password for security
+        navigate('/dashboard', { replace: true });
+      } else {
+        // For MySQL/Docker: Use REST API
+        const response = await apiClient.post('/bootstrap/setup-admin', {
+          email,
+          password,
+          full_name: fullName,
+        });
+
+        if (response.data.success) {
+          toast({
+            title: 'Setup Complete!',
+            description: 'Super admin account created. Please sign in.',
+          });
+          
+          await checkSystemStatus();
+          setPassword('');
+        }
       }
     } catch (error: any) {
-      const message = error.response?.data?.error || 'Setup failed';
+      const message = error.message || error.response?.data?.error || 'Setup failed';
       toast({
         variant: 'destructive',
         title: 'Setup Failed',

@@ -1,11 +1,8 @@
 import axios, { AxiosError, AxiosInstance, InternalAxiosRequestConfig } from 'axios';
+import { tokenManager } from '@/lib/auth/tokenManager';
 
 // API base URL - defaults to same origin for production, can be overridden for development
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
-
-// Token storage keys
-const ACCESS_TOKEN_KEY = 'pos_access_token';
-const REFRESH_TOKEN_KEY = 'pos_refresh_token';
 
 // Create axios instance
 const apiClient: AxiosInstance = axios.create({
@@ -15,26 +12,6 @@ const apiClient: AxiosInstance = axios.create({
   },
   timeout: 30000,
 });
-
-// Token management
-export const tokenManager = {
-  getAccessToken: (): string | null => localStorage.getItem(ACCESS_TOKEN_KEY),
-  getRefreshToken: (): string | null => localStorage.getItem(REFRESH_TOKEN_KEY),
-  
-  setTokens: (accessToken: string, refreshToken: string): void => {
-    localStorage.setItem(ACCESS_TOKEN_KEY, accessToken);
-    localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
-  },
-  
-  clearTokens: (): void => {
-    localStorage.removeItem(ACCESS_TOKEN_KEY);
-    localStorage.removeItem(REFRESH_TOKEN_KEY);
-  },
-  
-  hasTokens: (): boolean => {
-    return !!localStorage.getItem(ACCESS_TOKEN_KEY);
-  },
-};
 
 // Request interceptor - attach auth token
 apiClient.interceptors.request.use(

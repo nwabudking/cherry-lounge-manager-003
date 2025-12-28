@@ -1,4 +1,5 @@
-import apiClient, { tokenManager, getApiErrorMessage } from './client';
+import apiClient, { getApiErrorMessage } from './client';
+import { tokenManager } from '@/lib/auth/tokenManager';
 
 export interface User {
   id: string;
