@@ -49,20 +49,49 @@ export interface Supplier {
   updated_at: string;
 }
 
-const ensureArray = <T,>(value: unknown): T[] => (Array.isArray(value) ? (value as T[]) : []);
+const ensureArray = <T,>(value: unknown): T[] => {
+  if (Array.isArray(value)) return value as T[];
+  if (value && typeof value === 'object') {
+    const v = value as any;
+    const candidate = v.data ?? v.items ?? v.results ?? v.rows;
+    if (Array.isArray(candidate)) return candidate as T[];
+  }
+  return [];
+};
 
 export const inventoryApi = {
   // Inventory Items
   getItems: async (): Promise<InventoryItem[]> => {
+    // Lovable Cloud / Supabase reads
+    if (useSupabaseForReads()) {
+      const { data, error } = await supabase
+        .from('inventory_items')
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (!error) return ensureArray<InventoryItem>(data);
+      // Fall through to REST if available
+    }
+
     const response = await apiClient.get<InventoryItem[]>('/inventory/items');
-    return response.data;
+    return ensureArray<InventoryItem>(response.data);
   },
 
   getActiveItems: async (): Promise<InventoryItem[]> => {
+    // Lovable Cloud / Supabase reads
+    if (useSupabaseForReads()) {
+      const { data, error } = await supabase
+        .from('inventory_items')
+        .select('*')
+        .eq('is_active', true)
+        .order('created_at', { ascending: false });
+      if (!error) return ensureArray<InventoryItem>(data);
+      // Fall through to REST if available
+    }
+
     const response = await apiClient.get<InventoryItem[]>('/inventory/items', {
       params: { active: true },
     });
-    return response.data;
+    return ensureArray<InventoryItem>(response.data);
   },
 
   getLowStockItems: async (): Promise<InventoryItem[]> => {
@@ -107,10 +136,25 @@ export const inventoryApi = {
 
   // Stock Movements
   getMovements: async (itemId?: string): Promise<StockMovement[]> => {
+    // Lovable Cloud / Supabase reads
+    if (useSupabaseForReads()) {
+      let query = supabase
+        .from('stock_movements')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(100);
+
+      if (itemId) query = query.eq('inventory_item_id', itemId);
+
+      const { data, error } = await query;
+      if (!error) return ensureArray<StockMovement>(data);
+      // Fall through to REST if available
+    }
+
     const response = await apiClient.get<StockMovement[]>('/inventory/movements', {
       params: itemId ? { itemId } : undefined,
     });
-    return response.data;
+    return ensureArray<StockMovement>(response.data);
   },
 
   addStock: async (itemId: string, quantity: number, notes?: string): Promise<StockMovement> => {
@@ -145,15 +189,36 @@ export const inventoryApi = {
 
   // Suppliers
   getSuppliers: async (): Promise<Supplier[]> => {
+    // Lovable Cloud / Supabase reads
+    if (useSupabaseForReads()) {
+      const { data, error } = await supabase
+        .from('suppliers')
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (!error) return ensureArray<Supplier>(data);
+      // Fall through to REST if available
+    }
+
     const response = await apiClient.get<Supplier[]>('/suppliers');
-    return response.data;
+    return ensureArray<Supplier>(response.data);
   },
 
   getActiveSuppliers: async (): Promise<Supplier[]> => {
+    // Lovable Cloud / Supabase reads
+    if (useSupabaseForReads()) {
+      const { data, error } = await supabase
+        .from('suppliers')
+        .select('*')
+        .eq('is_active', true)
+        .order('created_at', { ascending: false });
+      if (!error) return ensureArray<Supplier>(data);
+      // Fall through to REST if available
+    }
+
     const response = await apiClient.get<Supplier[]>('/suppliers', {
       params: { active: true },
     });
-    return response.data;
+    return ensureArray<Supplier>(response.data);
   },
 
   getSupplier: async (id: string): Promise<Supplier> => {

@@ -34,20 +34,55 @@ export interface MenuItem {
   } | null;
 }
 
-const ensureArray = <T,>(value: unknown): T[] => (Array.isArray(value) ? (value as T[]) : []);
+const ensureArray = <T,>(value: unknown): T[] => {
+  if (Array.isArray(value)) return value as T[];
+  if (value && typeof value === 'object') {
+    const v = value as any;
+    const candidate = v.data ?? v.categories ?? v.items ?? v.results ?? v.rows;
+    if (Array.isArray(candidate)) return candidate as T[];
+  }
+  return [];
+};
 
 export const menuApi = {
   // Categories
   getCategories: async (): Promise<MenuCategory[]> => {
+    // Lovable Cloud / Supabase reads
+    if (useSupabaseForReads()) {
+      const { data, error } = await supabase
+        .from('menu_categories')
+        .select('*')
+        .order('sort_order', { ascending: true })
+        .order('created_at', { ascending: true });
+
+      if (!error) return ensureArray<MenuCategory>(data);
+      // Fall through to REST if available
+    }
+
+    // Docker/MySQL REST reads
     const response = await apiClient.get<MenuCategory[]>('/menu/categories');
-    return response.data;
+    return ensureArray<MenuCategory>(response.data);
   },
 
   getActiveCategories: async (): Promise<MenuCategory[]> => {
+    // Lovable Cloud / Supabase reads
+    if (useSupabaseForReads()) {
+      const { data, error } = await supabase
+        .from('menu_categories')
+        .select('*')
+        .eq('is_active', true)
+        .order('sort_order', { ascending: true })
+        .order('created_at', { ascending: true });
+
+      if (!error) return ensureArray<MenuCategory>(data);
+      // Fall through to REST if available
+    }
+
+    // Docker/MySQL REST reads
     const response = await apiClient.get<MenuCategory[]>('/menu/categories', {
       params: { active: true },
     });
-    return response.data;
+    return ensureArray<MenuCategory>(response.data);
   },
 
   createCategory: async (categoryData: Partial<MenuCategory>): Promise<MenuCategory> => {
@@ -66,10 +101,25 @@ export const menuApi = {
 
   // Menu Items
   getMenuItems: async (categoryId?: string): Promise<MenuItem[]> => {
+    // Lovable Cloud / Supabase reads
+    if (useSupabaseForReads()) {
+      let query = supabase
+        .from('menu_items')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (categoryId) query = query.eq('category_id', categoryId);
+
+      const { data, error } = await query;
+      if (!error) return ensureArray<MenuItem>(data);
+      // Fall through to REST if available
+    }
+
+    // Docker/MySQL REST reads
     const response = await apiClient.get<MenuItem[]>('/menu/items', {
       params: categoryId ? { categoryId } : undefined,
     });
-    return response.data;
+    return ensureArray<MenuItem>(response.data);
   },
 
   getActiveMenuItems: async (categoryId?: string): Promise<MenuItem[]> => {

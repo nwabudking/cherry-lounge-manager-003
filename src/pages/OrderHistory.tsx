@@ -101,7 +101,7 @@ const OrderHistory = () => {
     queryKey: ["order-history"],
     queryFn: async () => {
       const data = await ordersApi.getOrderHistory(500);
-      return data as Order[];
+      return Array.isArray(data) ? (data as Order[]) : ([] as Order[]);
     },
   });
 
