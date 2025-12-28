@@ -82,7 +82,7 @@ const Dashboard = () => {
   const todayEnd = endOfDay(today);
 
   // Fetch today's orders
-  const { data: todayOrders = [], isLoading: ordersLoading } = useQuery({
+  const { data: rawTodayOrders, isLoading: ordersLoading } = useQuery({
     queryKey: ["dashboard-orders", format(today, "yyyy-MM-dd")],
     queryFn: async () => {
       const orders = await ordersApi.getOrders({
@@ -92,18 +92,21 @@ const Dashboard = () => {
       return orders;
     },
   });
+  const todayOrders = Array.isArray(rawTodayOrders) ? rawTodayOrders : [];
 
   // Fetch low stock items
-  const { data: lowStockItems = [], isLoading: inventoryLoading } = useQuery({
+  const { data: rawLowStockItems, isLoading: inventoryLoading } = useQuery({
     queryKey: ["dashboard-low-stock"],
     queryFn: () => inventoryApi.getLowStockItems(),
   });
+  const lowStockItems = Array.isArray(rawLowStockItems) ? rawLowStockItems : [];
 
   // Fetch menu items count
-  const { data: menuItems = [] } = useQuery({
+  const { data: rawMenuItems } = useQuery({
     queryKey: ["dashboard-menu-count"],
     queryFn: () => menuApi.getActiveMenuItems(),
   });
+  const menuItems = Array.isArray(rawMenuItems) ? rawMenuItems : [];
 
   const menuItemsCount = menuItems.length;
 

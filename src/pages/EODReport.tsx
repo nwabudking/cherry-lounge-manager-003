@@ -79,7 +79,7 @@ const EODReport = () => {
   const isManager = role === "super_admin" || role === "manager";
 
   // Fetch all cashiers (for managers)
-  const { data: cashiers = [] } = useQuery({
+  const { data: rawCashiers } = useQuery({
     queryKey: ["cashiers-list"],
     queryFn: async () => {
       const data = await staffApi.getProfiles();
@@ -87,22 +87,27 @@ const EODReport = () => {
     },
     enabled: isManager,
   });
+  const cashiers = Array.isArray(rawCashiers) ? rawCashiers : [];
 
   // Fetch orders for the selected date
-  const { data: orders = [], isLoading } = useQuery({
+  const { data: rawOrders, isLoading } = useQuery({
     queryKey: ["eod-orders", selectedDate, selectedCashier],
     queryFn: async () => {
       const start = startOfDay(selectedDate).toISOString();
       const end = endOfDay(selectedDate).toISOString();
-      
-      const cashierId = selectedCashier !== "all" 
-        ? selectedCashier 
-        : (!isManager ? user?.id : undefined);
+
+      const cashierId =
+        selectedCashier !== "all"
+          ? selectedCashier
+          : !isManager
+          ? user?.id
+          : undefined;
 
       const data = await ordersApi.getCompletedOrdersByDate(start, end, cashierId);
       return data as OrderWithDetails[];
     },
   });
+  const orders = Array.isArray(rawOrders) ? rawOrders : [];
 
   // Calculate summary statistics
   const summary = {

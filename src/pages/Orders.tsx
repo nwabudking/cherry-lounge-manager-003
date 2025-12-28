@@ -30,7 +30,7 @@ const Orders = () => {
   const [dateFilter, setDateFilter] = useState<Date | undefined>(undefined);
   const [selectedOrder, setSelectedOrder] = useState<OrderWithItems | null>(null);
 
-  const { data: orders = [], isLoading } = useOrders({
+  const { data: rawOrders, isLoading } = useOrders({
     status: statusFilter !== "all" ? statusFilter : undefined,
     orderType: orderTypeFilter !== "all" ? orderTypeFilter : undefined,
     search: searchQuery || undefined,
@@ -41,6 +41,7 @@ const Orders = () => {
       ? new Date(dateFilter.setHours(23, 59, 59, 999)).toISOString()
       : undefined,
   });
+  const orders = Array.isArray(rawOrders) ? rawOrders : [];
 
   const updateStatusMutation = useUpdateOrderStatus();
 
