@@ -110,6 +110,9 @@ serve(async (req) => {
     if (action === "create") {
       const { email, password, fullName, role } = body;
       
+      console.log("Create staff request - email:", email, "role:", role);
+      console.log("Requesting user role:", requestingUserRole);
+      
       if (!email || !password) {
         return new Response(JSON.stringify({ error: "Email and password required" }), {
           status: 400,
@@ -119,7 +122,10 @@ serve(async (req) => {
 
       // Check if requesting user can assign this role
       const assignableRoles = getAssignableRoles(requestingUserRole);
+      console.log("Assignable roles for", requestingUserRole, ":", assignableRoles);
+      
       if (role && !assignableRoles.includes(role)) {
+        console.log("Role not assignable:", role);
         return new Response(JSON.stringify({ 
           error: `You don't have permission to assign the ${role} role` 
         }), {
@@ -129,6 +135,7 @@ serve(async (req) => {
       }
 
       // Create user with admin API
+      console.log("Creating auth user...");
       const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
         email,
         password,
@@ -137,27 +144,41 @@ serve(async (req) => {
       });
 
       if (createError) {
+        console.error("Create user error:", createError);
         return new Response(JSON.stringify({ error: createError.message }), {
           status: 400,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
+      console.log("User created:", newUser.user.id);
+
       // Create profile
-      await supabaseAdmin.from("profiles").insert({
+      console.log("Creating profile...");
+      const { error: profileError } = await supabaseAdmin.from("profiles").insert({
         id: newUser.user.id,
         email,
         full_name: fullName,
       });
+      
+      if (profileError) {
+        console.error("Profile creation error:", profileError);
+      }
 
       // Assign role
       if (role) {
-        await supabaseAdmin.from("user_roles").insert({
+        console.log("Assigning role:", role);
+        const { error: roleError } = await supabaseAdmin.from("user_roles").insert({
           user_id: newUser.user.id,
           role,
         });
+        
+        if (roleError) {
+          console.error("Role assignment error:", roleError);
+        }
       }
 
+      console.log("Staff creation successful");
       return new Response(JSON.stringify({ success: true, user: newUser.user }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
