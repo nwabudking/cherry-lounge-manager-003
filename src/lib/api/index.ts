@@ -1,10 +1,13 @@
 // API Client exports
-export { default as apiClient, tokenManager, getApiErrorMessage } from './client';
+export { default as apiClient, getApiErrorMessage } from './client';
 export type { ApiError } from './client';
 
-// Auth API
-export { authApi } from './auth';
-export type { User, AuthResponse, LoginCredentials, RegisterData } from './auth';
+// Token manager
+export { tokenManager } from '@/lib/auth/tokenManager';
+
+// Auth - now uses unified auth
+export { unifiedAuth } from '@/lib/auth';
+export type { User, AuthResponse } from '@/lib/auth';
 
 // Menu API
 export { menuApi } from './menu';

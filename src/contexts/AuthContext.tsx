@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
-import { authApi, User, tokenManager, getApiErrorMessage } from '@/lib/api';
+import { unifiedAuth, User, tokenManager } from '@/lib/auth';
+import { supabase } from '@/integrations/supabase/client';
 
 export type AppRole = 'super_admin' | 'manager' | 'cashier' | 'bar_staff' | 'kitchen_staff' | 'inventory_officer' | 'accountant';
 
@@ -14,8 +15,7 @@ interface AuthContextType {
   refreshUser: () => Promise<void>;
 }
 
-// Preserve context instance across Vite HMR updates to avoid "useAuth must be used within an AuthProvider"
-// when the consumer gets a new context instance but the provider is still using the old one.
+// Preserve context instance across Vite HMR updates
 const AuthContext: React.Context<AuthContextType | undefined> =
   ((globalThis as unknown as { __APP_AUTH_CONTEXT__?: React.Context<AuthContextType | undefined> }).__APP_AUTH_CONTEXT__ ??
     createContext<AuthContextType | undefined>(undefined));
@@ -35,56 +35,79 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState(true);
 
   const fetchCurrentUser = useCallback(async () => {
-    if (!tokenManager.hasTokens()) {
-      setUser(null);
-      setLoading(false);
-      return;
-    }
-
     try {
-      const currentUser = await authApi.getCurrentUser();
+      const currentUser = await unifiedAuth.getCurrentUser();
       setUser(currentUser);
     } catch (error) {
       console.error('Error fetching current user:', error);
-      // Token might be invalid, clear it
-      tokenManager.clearTokens();
       setUser(null);
     } finally {
       setLoading(false);
     }
   }, []);
 
-  // Check for existing session on mount
+  // Set up auth state listener for Supabase
   useEffect(() => {
-    fetchCurrentUser();
+    // Check if using Supabase auth
+    if (unifiedAuth.isSupabaseAuth()) {
+      // Set up Supabase auth state listener
+      const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+        if (event === 'SIGNED_OUT') {
+          setUser(null);
+          setLoading(false);
+        } else if (session?.user) {
+          // Defer the user fetch to avoid deadlock
+          setTimeout(() => {
+            fetchCurrentUser();
+          }, 0);
+        } else {
+          setLoading(false);
+        }
+      });
+
+      // Initial session check
+      fetchCurrentUser();
+
+      return () => {
+        subscription.unsubscribe();
+      };
+    } else {
+      // For REST API auth, just check tokens
+      fetchCurrentUser();
+    }
   }, [fetchCurrentUser]);
 
   const signIn = async (email: string, password: string) => {
     try {
-      const response = await authApi.login({ email, password });
-      setUser(response.user);
-      // Return success only after state is set
+      const { user: authUser, error } = await unifiedAuth.login(email, password);
+      if (error) {
+        return { error };
+      }
+      setUser(authUser);
       return { error: null };
     } catch (error) {
       console.error('Login error:', error);
-      return { error: new Error(getApiErrorMessage(error)) };
+      return { error: error instanceof Error ? error : new Error('Login failed') };
     }
   };
 
   const signUp = async (email: string, password: string, fullName: string) => {
     try {
-      const response = await authApi.register({ email, password, full_name: fullName });
-      setUser(response.user);
+      const { user: authUser, error } = await unifiedAuth.register(email, password, fullName);
+      if (error) {
+        return { error };
+      }
+      setUser(authUser);
       return { error: null };
     } catch (error) {
       console.error('Registration error:', error);
-      return { error: new Error(getApiErrorMessage(error)) };
+      return { error: error instanceof Error ? error : new Error('Registration failed') };
     }
   };
 
   const signOut = async () => {
     try {
-      await authApi.logout();
+      await unifiedAuth.logout();
     } catch (error) {
       console.error('Logout error:', error);
     } finally {
