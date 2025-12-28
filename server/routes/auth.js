@@ -70,58 +70,16 @@ router.post('/login', async (req, res) => {
   }
 });
 
-// Register new user
+// Register new user - DISABLED for public access
+// Staff accounts should be created by super_admin through Staff Management
 router.post('/register', async (req, res) => {
-  try {
-    const { email, password, full_name } = req.body;
-
-    if (!email || !password) {
-      return res.status(400).json({ error: 'Email and password required' });
-    }
-
-    if (password.length < 6) {
-      return res.status(400).json({ error: 'Password must be at least 6 characters' });
-    }
-
-    // Check if user exists
-    const existing = await query('SELECT id FROM users WHERE email = ?', [email]);
-    if (existing.length > 0) {
-      return res.status(400).json({ error: 'User already exists' });
-    }
-
-    // Check if this is the first user (make them super_admin)
-    const allUsers = await query('SELECT COUNT(*) as count FROM users');
-    const isFirstUser = allUsers[0].count === 0;
-
-    // Create user
-    const userId = uuidv4();
-    const passwordHash = await bcrypt.hash(password, 10);
-    
-    await query('INSERT INTO users (id, email, password_hash) VALUES (?, ?, ?)', 
-      [userId, email, passwordHash]);
-
-    // Create profile
-    await query('INSERT INTO profiles (id, email, full_name) VALUES (?, ?, ?)', 
-      [userId, email, full_name || null]);
-
-    // Create role (first user is super_admin, others are cashier)
-    const role = isFirstUser ? 'super_admin' : 'cashier';
-    await query('INSERT INTO user_roles (id, user_id, role) VALUES (?, ?, ?)', 
-      [uuidv4(), userId, role]);
-
-    // Generate tokens
-    const accessToken = generateToken({ id: userId, email, role });
-    const refreshToken = generateToken({ id: userId, email, type: 'refresh' }, '7d');
-
-    res.status(201).json({
-      accessToken,
-      refreshToken,
-      user: { id: userId, email, full_name: full_name || null, avatar_url: null, role },
-    });
-  } catch (error) {
-    console.error('Register error:', error);
-    res.status(500).json({ error: 'Registration failed' });
-  }
+  // Public registration is disabled for security
+  // Use /bootstrap/setup-admin for initial setup
+  // Use Staff Management for creating new staff accounts
+  return res.status(403).json({ 
+    error: 'Public registration is disabled. Contact your administrator.',
+    code: 'REGISTRATION_DISABLED'
+  });
 });
 
 // Refresh token

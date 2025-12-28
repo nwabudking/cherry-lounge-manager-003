@@ -1,12 +1,13 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
-import { Loader2, Download, Upload, Database, CheckCircle2, AlertCircle, RefreshCw } from "lucide-react";
+import { Loader2, Download, Upload, Database, CheckCircle2, AlertCircle, RefreshCw, ShieldCheck, FileJson } from "lucide-react";
 import { Navigate } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import apiClient from "@/lib/api/client";
 import { supabase } from "@/integrations/supabase/client";
 import { getEnvironmentConfig } from "@/lib/db/environment";
@@ -23,13 +24,41 @@ interface SyncResult {
   errors: string[];
 }
 
+interface SystemStatus {
+  initialized: boolean;
+  hasSuperAdmin: boolean;
+  users: number;
+  categories: number;
+  menuItems: number;
+  hasSettings: boolean;
+}
+
 export default function DataSync() {
-  const { role } = useAuth();
+  const { role, user } = useAuth();
   const [isSyncing, setIsSyncing] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [result, setResult] = useState<SyncResult | null>(null);
   const [exportData, setExportData] = useState<string>("");
+  const [systemStatus, setSystemStatus] = useState<SystemStatus | null>(null);
+  const [isLoadingStatus, setIsLoadingStatus] = useState(true);
   const config = getEnvironmentConfig();
+
+  // Fetch system status on mount
+  useEffect(() => {
+    fetchSystemStatus();
+  }, []);
+
+  const fetchSystemStatus = async () => {
+    setIsLoadingStatus(true);
+    try {
+      const response = await apiClient.get("/bootstrap/status");
+      setSystemStatus(response.data);
+    } catch (error) {
+      console.error("Failed to fetch system status:", error);
+    } finally {
+      setIsLoadingStatus(false);
+    }
+  };
 
   // Only super_admin can access this page
   if (role !== "super_admin") {
@@ -143,22 +172,31 @@ export default function DataSync() {
     <div className="p-6 space-y-6">
       <div className="max-w-4xl mx-auto space-y-6">
         <div>
-          <h1 className="text-3xl font-bold">Data Sync & Backup</h1>
+          <h1 className="text-3xl font-bold">Data Sync & Restore</h1>
           <p className="text-muted-foreground mt-2">
-            Sync data between Supabase (online) and MySQL (offline) databases.
+            Restore data from Lovable/Supabase into MySQL for offline operation.
           </p>
         </div>
 
-        {/* Environment Status */}
+        {/* Super Admin Notice */}
+        <Alert className="border-primary/50 bg-primary/5">
+          <ShieldCheck className="h-4 w-4 text-primary" />
+          <AlertTitle className="text-primary">Super Admin Access</AlertTitle>
+          <AlertDescription className="text-muted-foreground">
+            Logged in as {user?.email}. Only super admins can access data restore functions.
+          </AlertDescription>
+        </Alert>
+
+        {/* System Status */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Database className="h-5 w-5" />
-              Environment Status
+              System Status
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               <div className="flex items-center gap-2 p-3 bg-muted rounded-lg">
                 <div className={`w-3 h-3 rounded-full ${config.mode === 'supabase' ? 'bg-green-500' : config.mode === 'hybrid' ? 'bg-blue-500' : 'bg-yellow-500'}`} />
                 <div>
@@ -189,6 +227,24 @@ export default function DataSync() {
                   <p className="text-sm font-medium">MySQL (REST API)</p>
                   <p className="text-xs text-muted-foreground">
                     {config.mysqlAvailable ? 'Available' : 'Not available'}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 p-3 bg-muted rounded-lg">
+                {isLoadingStatus ? (
+                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                ) : systemStatus?.initialized ? (
+                  <CheckCircle2 className="h-5 w-5 text-green-500" />
+                ) : (
+                  <AlertCircle className="h-5 w-5 text-yellow-500" />
+                )}
+                <div>
+                  <p className="text-sm font-medium">Database</p>
+                  <p className="text-xs text-muted-foreground">
+                    {isLoadingStatus ? 'Checking...' : 
+                      systemStatus?.initialized ? 
+                        `${systemStatus.users} users, ${systemStatus.menuItems} items` : 
+                        'Empty'}
                   </p>
                 </div>
               </div>
