@@ -515,6 +515,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      normalize_name: { Args: { input_text: string }; Returns: string }
     }
     Enums: {
       app_role:
