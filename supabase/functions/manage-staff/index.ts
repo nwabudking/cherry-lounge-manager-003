@@ -7,12 +7,13 @@ const corsHeaders = {
 };
 
 interface CreateUserRequest {
-  action: "create" | "delete" | "update";
+  action: "create" | "delete" | "update" | "update-email";
   email?: string;
   password?: string;
   fullName?: string;
   role?: string;
   userId?: string;
+  newEmail?: string;
 }
 
 serve(async (req) => {
@@ -262,6 +263,46 @@ serve(async (req) => {
           await supabaseAdmin.from("user_roles").insert({ user_id: userId, role });
         }
       }
+
+      return new Response(JSON.stringify({ success: true }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (action === "update-email") {
+      const { userId, newEmail } = body;
+      
+      if (!userId || !newEmail) {
+        return new Response(JSON.stringify({ error: "User ID and new email required" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Only super_admin can update emails
+      if (requestingUserRole !== "super_admin") {
+        return new Response(JSON.stringify({ error: "Only super admin can update user emails" }), {
+          status: 403,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Update auth user email
+      const { error: updateAuthError } = await supabaseAdmin.auth.admin.updateUserById(userId, {
+        email: newEmail,
+        email_confirm: true,
+      });
+
+      if (updateAuthError) {
+        return new Response(JSON.stringify({ error: updateAuthError.message }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Update profile email
+      await supabaseAdmin.from("profiles").update({ email: newEmail }).eq("id", userId);
 
       return new Response(JSON.stringify({ success: true }), {
         status: 200,
