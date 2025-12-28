@@ -72,9 +72,13 @@ const invokeWithAuth = async <T,>(functionName: string, body: unknown) => {
   const { data: sessionData } = await supabase.auth.getSession();
   const accessToken = sessionData.session?.access_token;
 
+  if (!accessToken) {
+    throw new Error('Not authenticated. Please log in again.');
+  }
+
   return await supabase.functions.invoke<T>(functionName, {
     body,
-    headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
+    headers: { Authorization: `Bearer ${accessToken}` },
   });
 };
 
