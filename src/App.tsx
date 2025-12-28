@@ -14,6 +14,7 @@ import EODReport from "./pages/EODReport";
 import { POS, Orders, OrderHistory, Menu, Bar, Kitchen, Inventory, Staff, Customers, Reports, SettingsPage } from "./pages/modules";
 import NotFound from "./pages/NotFound";
 
+// Query client configuration
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
