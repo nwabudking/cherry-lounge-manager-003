@@ -1,11 +1,6 @@
-// API Client exports
-export { default as apiClient, getApiErrorMessage } from './client';
-export type { ApiError } from './client';
+// API exports - Supabase only
 
-// Token manager
-export { tokenManager } from '@/lib/auth/tokenManager';
-
-// Auth - now uses unified auth
+// Auth - uses unified auth
 export { unifiedAuth } from '@/lib/auth';
 export type { User, AuthResponse } from '@/lib/auth';
 

@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import type { TablesInsert, TablesUpdate } from '@/integrations/supabase/types';
 
 export interface MenuCategory {
   id: string;
@@ -62,9 +63,16 @@ export const menuApi = {
   },
 
   createCategory: async (categoryData: Partial<MenuCategory>): Promise<MenuCategory> => {
+    const insertData: TablesInsert<'menu_categories'> = {
+      name: categoryData.name || 'Unnamed Category',
+      category_type: categoryData.category_type,
+      sort_order: categoryData.sort_order,
+      is_active: categoryData.is_active ?? true,
+    };
+
     const { data, error } = await supabase
       .from('menu_categories')
-      .insert(categoryData)
+      .insert(insertData)
       .select()
       .single();
     
@@ -73,9 +81,15 @@ export const menuApi = {
   },
 
   updateCategory: async (id: string, categoryData: Partial<MenuCategory>): Promise<MenuCategory> => {
+    const updateData: TablesUpdate<'menu_categories'> = {};
+    if (categoryData.name !== undefined) updateData.name = categoryData.name;
+    if (categoryData.category_type !== undefined) updateData.category_type = categoryData.category_type;
+    if (categoryData.sort_order !== undefined) updateData.sort_order = categoryData.sort_order;
+    if (categoryData.is_active !== undefined) updateData.is_active = categoryData.is_active;
+
     const { data, error } = await supabase
       .from('menu_categories')
-      .update(categoryData)
+      .update(updateData)
       .eq('id', id)
       .select()
       .single();
@@ -134,9 +148,22 @@ export const menuApi = {
   },
 
   createMenuItem: async (itemData: Partial<MenuItem>): Promise<MenuItem> => {
+    const insertData: TablesInsert<'menu_items'> = {
+      name: itemData.name || 'Unnamed Item',
+      price: itemData.price ?? 0,
+      description: itemData.description,
+      cost_price: itemData.cost_price,
+      category_id: itemData.category_id,
+      image_url: itemData.image_url,
+      is_active: itemData.is_active ?? true,
+      is_available: itemData.is_available ?? true,
+      track_inventory: itemData.track_inventory ?? false,
+      inventory_item_id: itemData.inventory_item_id,
+    };
+
     const { data, error } = await supabase
       .from('menu_items')
-      .insert(itemData)
+      .insert(insertData)
       .select()
       .single();
     
@@ -145,9 +172,21 @@ export const menuApi = {
   },
 
   updateMenuItem: async (id: string, itemData: Partial<MenuItem>): Promise<MenuItem> => {
+    const updateData: TablesUpdate<'menu_items'> = {};
+    if (itemData.name !== undefined) updateData.name = itemData.name;
+    if (itemData.price !== undefined) updateData.price = itemData.price;
+    if (itemData.description !== undefined) updateData.description = itemData.description;
+    if (itemData.cost_price !== undefined) updateData.cost_price = itemData.cost_price;
+    if (itemData.category_id !== undefined) updateData.category_id = itemData.category_id;
+    if (itemData.image_url !== undefined) updateData.image_url = itemData.image_url;
+    if (itemData.is_active !== undefined) updateData.is_active = itemData.is_active;
+    if (itemData.is_available !== undefined) updateData.is_available = itemData.is_available;
+    if (itemData.track_inventory !== undefined) updateData.track_inventory = itemData.track_inventory;
+    if (itemData.inventory_item_id !== undefined) updateData.inventory_item_id = itemData.inventory_item_id;
+
     const { data, error } = await supabase
       .from('menu_items')
-      .update(itemData)
+      .update(updateData)
       .eq('id', id)
       .select()
       .single();
@@ -167,7 +206,7 @@ export const menuApi = {
 
   uploadImage: async (file: File): Promise<string> => {
     const fileExt = file.name.split('.').pop();
-    const fileName = `${crypto.randomUUID?.() || Date.now()}.${fileExt}`;
+    const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
     const filePath = `menu/${fileName}`;
 
     const { error: uploadError } = await supabase.storage

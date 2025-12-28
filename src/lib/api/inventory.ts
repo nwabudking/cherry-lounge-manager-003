@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import type { TablesInsert, TablesUpdate } from '@/integrations/supabase/types';
 
 export interface InventoryItem {
   id: string;
@@ -97,9 +98,22 @@ export const inventoryApi = {
   },
 
   createItem: async (itemData: Partial<InventoryItem>): Promise<InventoryItem> => {
+    const insertData: TablesInsert<'inventory_items'> = {
+      name: itemData.name || 'Unnamed Item',
+      category: itemData.category,
+      category_id: itemData.category_id,
+      unit: itemData.unit,
+      current_stock: itemData.current_stock ?? 0,
+      min_stock_level: itemData.min_stock_level ?? 10,
+      cost_per_unit: itemData.cost_per_unit,
+      supplier: itemData.supplier,
+      supplier_id: itemData.supplier_id,
+      is_active: itemData.is_active ?? true,
+    };
+
     const { data, error } = await supabase
       .from('inventory_items')
-      .insert(itemData)
+      .insert(insertData)
       .select()
       .single();
     
@@ -108,9 +122,21 @@ export const inventoryApi = {
   },
 
   updateItem: async (id: string, itemData: Partial<InventoryItem>): Promise<InventoryItem> => {
+    const updateData: TablesUpdate<'inventory_items'> = {};
+    if (itemData.name !== undefined) updateData.name = itemData.name;
+    if (itemData.category !== undefined) updateData.category = itemData.category;
+    if (itemData.category_id !== undefined) updateData.category_id = itemData.category_id;
+    if (itemData.unit !== undefined) updateData.unit = itemData.unit;
+    if (itemData.current_stock !== undefined) updateData.current_stock = itemData.current_stock;
+    if (itemData.min_stock_level !== undefined) updateData.min_stock_level = itemData.min_stock_level;
+    if (itemData.cost_per_unit !== undefined) updateData.cost_per_unit = itemData.cost_per_unit;
+    if (itemData.supplier !== undefined) updateData.supplier = itemData.supplier;
+    if (itemData.supplier_id !== undefined) updateData.supplier_id = itemData.supplier_id;
+    if (itemData.is_active !== undefined) updateData.is_active = itemData.is_active;
+
     const { data, error } = await supabase
       .from('inventory_items')
-      .update(itemData)
+      .update(updateData)
       .eq('id', id)
       .select()
       .single();
@@ -288,9 +314,19 @@ export const inventoryApi = {
   },
 
   createSupplier: async (supplierData: Partial<Supplier>): Promise<Supplier> => {
+    const insertData: TablesInsert<'suppliers'> = {
+      name: supplierData.name || 'Unnamed Supplier',
+      contact_person: supplierData.contact_person,
+      phone: supplierData.phone,
+      email: supplierData.email,
+      address: supplierData.address,
+      notes: supplierData.notes,
+      is_active: supplierData.is_active ?? true,
+    };
+
     const { data, error } = await supabase
       .from('suppliers')
-      .insert(supplierData)
+      .insert(insertData)
       .select()
       .single();
     
@@ -299,9 +335,18 @@ export const inventoryApi = {
   },
 
   updateSupplier: async (id: string, supplierData: Partial<Supplier>): Promise<Supplier> => {
+    const updateData: TablesUpdate<'suppliers'> = {};
+    if (supplierData.name !== undefined) updateData.name = supplierData.name;
+    if (supplierData.contact_person !== undefined) updateData.contact_person = supplierData.contact_person;
+    if (supplierData.phone !== undefined) updateData.phone = supplierData.phone;
+    if (supplierData.email !== undefined) updateData.email = supplierData.email;
+    if (supplierData.address !== undefined) updateData.address = supplierData.address;
+    if (supplierData.notes !== undefined) updateData.notes = supplierData.notes;
+    if (supplierData.is_active !== undefined) updateData.is_active = supplierData.is_active;
+
     const { data, error } = await supabase
       .from('suppliers')
-      .update(supplierData)
+      .update(updateData)
       .eq('id', id)
       .select()
       .single();
