@@ -5,11 +5,13 @@ import { useToast } from "@/hooks/use-toast";
 import { useActiveMenuCategories, useActiveMenuItems } from "@/hooks/useMenu";
 import { useCreateOrder } from "@/hooks/useOrders";
 import { ordersApi, CreateOrderData } from "@/lib/api/orders";
+import { customersApi, Customer } from "@/lib/api/customers";
 import { POSHeader } from "@/components/pos/POSHeader";
 import { CategoryTabs } from "@/components/pos/CategoryTabs";
 import { MenuGrid } from "@/components/pos/MenuGrid";
 import { CartPanel } from "@/components/pos/CartPanel";
 import { CheckoutDialog } from "@/components/pos/CheckoutDialog";
+import { CustomerSelect } from "@/components/pos/CustomerSelect";
 import { generateUUID } from "@/lib/utils/uuid";
 
 export interface CartItem {
@@ -43,6 +45,7 @@ const POS = () => {
   const [tableNumber, setTableNumber] = useState("");
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [completedOrder, setCompletedOrder] = useState<CompletedOrder | null>(null);
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
 
   const { data: rawCategories } = useActiveMenuCategories();
   const { data: rawMenuItems } = useActiveMenuItems(selectedCategory || undefined);
@@ -56,6 +59,7 @@ const POS = () => {
       const orderData: CreateOrderData = {
         order_type: orderType,
         table_number: orderType === "dine_in" ? tableNumber : undefined,
+        customer_id: selectedCustomer?.id,
         items: cart.map((item) => ({
           menu_item_id: item.menuItemId,
           item_name: item.name,
@@ -69,7 +73,19 @@ const POS = () => {
         },
       };
 
-      return ordersApi.createOrder(orderData);
+      const order = await ordersApi.createOrder(orderData);
+
+      // Update customer stats and loyalty points if customer is linked
+      if (selectedCustomer?.id) {
+        await customersApi.updateCustomerStats(selectedCustomer.id, subtotal);
+        // Award 1 loyalty point per ₦100 spent
+        const pointsToAward = Math.floor(subtotal / 100);
+        if (pointsToAward > 0) {
+          await customersApi.addLoyaltyPoints(selectedCustomer.id, pointsToAward);
+        }
+      }
+
+      return order;
     },
     onSuccess: (order) => {
       toast({
@@ -80,9 +96,11 @@ const POS = () => {
       setCompletedOrder(order);
       setCart([]);
       setTableNumber("");
+      setSelectedCustomer(null);
       queryClient.invalidateQueries({ queryKey: ["orders"] });
       queryClient.invalidateQueries({ queryKey: ["menu"] });
       queryClient.invalidateQueries({ queryKey: ["inventory"] });
+      queryClient.invalidateQueries({ queryKey: ["customers"] });
     },
     onError: (error: Error) => {
       toast({
@@ -183,6 +201,8 @@ const POS = () => {
         onRemoveItem={removeFromCart}
         onClearCart={clearCart}
         onCheckout={() => setIsCheckoutOpen(true)}
+        selectedCustomer={selectedCustomer}
+        onSelectCustomer={setSelectedCustomer}
       />
 
       <CheckoutDialog
