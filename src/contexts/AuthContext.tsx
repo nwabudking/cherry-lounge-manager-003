@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
-import { unifiedAuth, User, tokenManager } from '@/lib/auth';
+import { unifiedAuth, User } from '@/lib/auth';
 import { supabase } from '@/integrations/supabase/client';
 
 export type AppRole = 'super_admin' | 'manager' | 'cashier' | 'bar_staff' | 'kitchen_staff' | 'inventory_officer' | 'accountant';
@@ -15,7 +15,6 @@ interface AuthContextType {
   refreshUser: () => Promise<void>;
 }
 
-// Preserve context instance across Vite HMR updates
 const AuthContext: React.Context<AuthContextType | undefined> =
   ((globalThis as unknown as { __APP_AUTH_CONTEXT__?: React.Context<AuthContextType | undefined> }).__APP_AUTH_CONTEXT__ ??
     createContext<AuthContextType | undefined>(undefined));
@@ -46,47 +45,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, []);
 
-  // Set up auth state listener for Supabase
   useEffect(() => {
-    // Check if using Supabase auth
-    if (unifiedAuth.isSupabaseAuth()) {
-      // Set up Supabase auth state listener
-      const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-        if (event === 'SIGNED_OUT') {
-          setUser(null);
-          setLoading(false);
-        } else if (session?.user) {
-          // Defer the user fetch to avoid deadlock
-          setTimeout(() => {
-            fetchCurrentUser();
-          }, 0);
-        } else {
-          setLoading(false);
-        }
-      });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_OUT') {
+        setUser(null);
+        setLoading(false);
+      } else if (session?.user) {
+        setTimeout(() => fetchCurrentUser(), 0);
+      } else {
+        setLoading(false);
+      }
+    });
 
-      // Initial session check
-      fetchCurrentUser();
+    fetchCurrentUser();
 
-      return () => {
-        subscription.unsubscribe();
-      };
-    } else {
-      // For REST API auth, just check tokens
-      fetchCurrentUser();
-    }
+    return () => {
+      subscription.unsubscribe();
+    };
   }, [fetchCurrentUser]);
 
   const signIn = async (email: string, password: string) => {
     try {
       const { user: authUser, error } = await unifiedAuth.login(email, password);
-      if (error) {
-        return { error };
-      }
+      if (error) return { error };
       setUser(authUser);
       return { error: null };
     } catch (error) {
-      console.error('Login error:', error);
       return { error: error instanceof Error ? error : new Error('Login failed') };
     }
   };
@@ -94,13 +78,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signUp = async (email: string, password: string, fullName: string) => {
     try {
       const { user: authUser, error } = await unifiedAuth.register(email, password, fullName);
-      if (error) {
-        return { error };
-      }
+      if (error) return { error };
       setUser(authUser);
       return { error: null };
     } catch (error) {
-      console.error('Registration error:', error);
       return { error: error instanceof Error ? error : new Error('Registration failed') };
     }
   };
@@ -108,8 +89,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signOut = async () => {
     try {
       await unifiedAuth.logout();
-    } catch (error) {
-      console.error('Logout error:', error);
     } finally {
       setUser(null);
     }
@@ -119,15 +98,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await fetchCurrentUser();
   };
 
-  const role = user?.role as AppRole | null;
-  const isAuthenticated = !!user;
-
   return (
     <AuthContext.Provider value={{
       user,
-      role,
+      role: user?.role as AppRole | null,
       loading,
-      isAuthenticated,
+      isAuthenticated: !!user,
       signIn,
       signUp,
       signOut,

@@ -1,18 +1,11 @@
 import { useState } from 'react';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Loader2, Eye, EyeOff } from 'lucide-react';
 import { toast } from 'sonner';
-import { authApi } from '@/lib/api/auth';
+import { unifiedAuth } from '@/lib/auth';
 
 interface ChangePasswordDialogProps {
   open: boolean;
@@ -20,11 +13,9 @@ interface ChangePasswordDialogProps {
 }
 
 export const ChangePasswordDialog = ({ open, onOpenChange }: ChangePasswordDialogProps) => {
-  const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
@@ -32,7 +23,7 @@ export const ChangePasswordDialog = ({ open, onOpenChange }: ChangePasswordDialo
     e.preventDefault();
 
     if (newPassword !== confirmPassword) {
-      toast.error('New passwords do not match');
+      toast.error('Passwords do not match');
       return;
     }
 
@@ -43,7 +34,8 @@ export const ChangePasswordDialog = ({ open, onOpenChange }: ChangePasswordDialo
 
     setIsLoading(true);
     try {
-      await authApi.changePassword(currentPassword, newPassword);
+      const { error } = await unifiedAuth.changePassword(newPassword);
+      if (error) throw error;
       toast.success('Password changed successfully');
       handleClose();
     } catch (error) {
@@ -54,12 +46,8 @@ export const ChangePasswordDialog = ({ open, onOpenChange }: ChangePasswordDialo
   };
 
   const handleClose = () => {
-    setCurrentPassword('');
     setNewPassword('');
     setConfirmPassword('');
-    setShowCurrentPassword(false);
-    setShowNewPassword(false);
-    setShowConfirmPassword(false);
     onOpenChange(false);
   };
 
@@ -68,37 +56,9 @@ export const ChangePasswordDialog = ({ open, onOpenChange }: ChangePasswordDialo
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Change Password</DialogTitle>
-          <DialogDescription>
-            Enter your current password and choose a new one.
-          </DialogDescription>
+          <DialogDescription>Enter your new password.</DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="current-password">Current Password</Label>
-            <div className="relative">
-              <Input
-                id="current-password"
-                type={showCurrentPassword ? 'text' : 'password'}
-                value={currentPassword}
-                onChange={(e) => setCurrentPassword(e.target.value)}
-                required
-                disabled={isLoading}
-              />
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
-                onClick={() => setShowCurrentPassword(!showCurrentPassword)}
-              >
-                {showCurrentPassword ? (
-                  <EyeOff className="h-4 w-4 text-muted-foreground" />
-                ) : (
-                  <Eye className="h-4 w-4 text-muted-foreground" />
-                )}
-              </Button>
-            </div>
-          </div>
           <div className="space-y-2">
             <Label htmlFor="new-password">New Password</Label>
             <div className="relative">
@@ -110,23 +70,13 @@ export const ChangePasswordDialog = ({ open, onOpenChange }: ChangePasswordDialo
                 required
                 disabled={isLoading}
               />
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
-                onClick={() => setShowNewPassword(!showNewPassword)}
-              >
-                {showNewPassword ? (
-                  <EyeOff className="h-4 w-4 text-muted-foreground" />
-                ) : (
-                  <Eye className="h-4 w-4 text-muted-foreground" />
-                )}
+              <Button type="button" variant="ghost" size="icon" className="absolute right-0 top-0 h-full px-3" onClick={() => setShowNewPassword(!showNewPassword)}>
+                {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </Button>
             </div>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="confirm-password">Confirm New Password</Label>
+            <Label htmlFor="confirm-password">Confirm Password</Label>
             <div className="relative">
               <Input
                 id="confirm-password"
@@ -136,25 +86,13 @@ export const ChangePasswordDialog = ({ open, onOpenChange }: ChangePasswordDialo
                 required
                 disabled={isLoading}
               />
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
-                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-              >
-                {showConfirmPassword ? (
-                  <EyeOff className="h-4 w-4 text-muted-foreground" />
-                ) : (
-                  <Eye className="h-4 w-4 text-muted-foreground" />
-                )}
+              <Button type="button" variant="ghost" size="icon" className="absolute right-0 top-0 h-full px-3" onClick={() => setShowConfirmPassword(!showConfirmPassword)}>
+                {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </Button>
             </div>
           </div>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={handleClose} disabled={isLoading}>
-              Cancel
-            </Button>
+            <Button type="button" variant="outline" onClick={handleClose} disabled={isLoading}>Cancel</Button>
             <Button type="submit" disabled={isLoading}>
               {isLoading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
               Change Password

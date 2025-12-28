@@ -1,6 +1,4 @@
-import apiClient from './client';
 import { supabase } from '@/integrations/supabase/client';
-import { useSupabaseForReads } from '@/lib/db/environment';
 
 export interface InventoryItem {
   id: string;
@@ -16,7 +14,6 @@ export interface InventoryItem {
   is_active: boolean;
   created_at: string;
   updated_at: string;
-  // Joined data
   menu_categories?: {
     id: string;
     name: string;
@@ -51,193 +48,274 @@ export interface Supplier {
 
 const ensureArray = <T,>(value: unknown): T[] => {
   if (Array.isArray(value)) return value as T[];
-  if (value && typeof value === 'object') {
-    const v = value as any;
-    const candidate = v.data ?? v.items ?? v.results ?? v.rows;
-    if (Array.isArray(candidate)) return candidate as T[];
-  }
   return [];
 };
 
 export const inventoryApi = {
   // Inventory Items
   getItems: async (): Promise<InventoryItem[]> => {
-    // Lovable Cloud / Supabase reads
-    if (useSupabaseForReads()) {
-      const { data, error } = await supabase
-        .from('inventory_items')
-        .select('*')
-        .order('created_at', { ascending: false });
-      if (!error) return ensureArray<InventoryItem>(data);
-      // Fall through to REST if available
-    }
-
-    const response = await apiClient.get<InventoryItem[]>('/inventory/items');
-    return ensureArray<InventoryItem>(response.data);
+    const { data, error } = await supabase
+      .from('inventory_items')
+      .select('*')
+      .order('created_at', { ascending: false });
+    
+    if (error) throw new Error(error.message);
+    return ensureArray<InventoryItem>(data);
   },
 
   getActiveItems: async (): Promise<InventoryItem[]> => {
-    // Lovable Cloud / Supabase reads
-    if (useSupabaseForReads()) {
-      const { data, error } = await supabase
-        .from('inventory_items')
-        .select('*')
-        .eq('is_active', true)
-        .order('created_at', { ascending: false });
-      if (!error) return ensureArray<InventoryItem>(data);
-      // Fall through to REST if available
-    }
-
-    const response = await apiClient.get<InventoryItem[]>('/inventory/items', {
-      params: { active: true },
-    });
-    return ensureArray<InventoryItem>(response.data);
+    const { data, error } = await supabase
+      .from('inventory_items')
+      .select('*')
+      .eq('is_active', true)
+      .order('created_at', { ascending: false });
+    
+    if (error) throw new Error(error.message);
+    return ensureArray<InventoryItem>(data);
   },
 
   getLowStockItems: async (): Promise<InventoryItem[]> => {
-    // Lovable Cloud / Supabase reads
-    if (useSupabaseForReads()) {
-      // "Low stock" = current_stock <= min_stock_level
-      const { data, error } = await supabase
-        .from('inventory_items')
-        .select('*')
-        .eq('is_active', true);
+    const { data, error } = await supabase
+      .from('inventory_items')
+      .select('*')
+      .eq('is_active', true);
 
-      // The rpc call above is never executed; it only satisfies TS narrowing in some builds.
-      // We compute low-stock client-side to keep this query simple and portable.
-      if (error) return [];
-      const items = ensureArray<InventoryItem>(data);
-      return items.filter((i) => Number(i.current_stock) <= Number(i.min_stock_level));
-    }
-
-    // Docker/MySQL REST reads
-    const response = await apiClient.get<InventoryItem[]>('/inventory/items/low-stock');
-    return ensureArray<InventoryItem>(response.data);
+    if (error) return [];
+    const items = ensureArray<InventoryItem>(data);
+    return items.filter((i) => Number(i.current_stock) <= Number(i.min_stock_level));
   },
 
   getItem: async (id: string): Promise<InventoryItem> => {
-    const response = await apiClient.get<InventoryItem>(`/inventory/items/${id}`);
-    return response.data;
+    const { data, error } = await supabase
+      .from('inventory_items')
+      .select('*')
+      .eq('id', id)
+      .single();
+    
+    if (error) throw new Error(error.message);
+    return data as InventoryItem;
   },
 
   createItem: async (itemData: Partial<InventoryItem>): Promise<InventoryItem> => {
-    const response = await apiClient.post<InventoryItem>('/inventory/items', itemData);
-    return response.data;
+    const { data, error } = await supabase
+      .from('inventory_items')
+      .insert(itemData)
+      .select()
+      .single();
+    
+    if (error) throw new Error(error.message);
+    return data as InventoryItem;
   },
 
   updateItem: async (id: string, itemData: Partial<InventoryItem>): Promise<InventoryItem> => {
-    const response = await apiClient.patch<InventoryItem>(`/inventory/items/${id}`, itemData);
-    return response.data;
+    const { data, error } = await supabase
+      .from('inventory_items')
+      .update(itemData)
+      .eq('id', id)
+      .select()
+      .single();
+    
+    if (error) throw new Error(error.message);
+    return data as InventoryItem;
   },
 
   deleteItem: async (id: string): Promise<void> => {
-    await apiClient.delete(`/inventory/items/${id}`);
+    const { error } = await supabase
+      .from('inventory_items')
+      .delete()
+      .eq('id', id);
+    
+    if (error) throw new Error(error.message);
   },
 
   // Stock Movements
   getMovements: async (itemId?: string): Promise<StockMovement[]> => {
-    // Lovable Cloud / Supabase reads
-    if (useSupabaseForReads()) {
-      let query = supabase
-        .from('stock_movements')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(100);
+    let query = supabase
+      .from('stock_movements')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(100);
 
-      if (itemId) query = query.eq('inventory_item_id', itemId);
+    if (itemId) query = query.eq('inventory_item_id', itemId);
 
-      const { data, error } = await query;
-      if (!error) return ensureArray<StockMovement>(data);
-      // Fall through to REST if available
-    }
-
-    const response = await apiClient.get<StockMovement[]>('/inventory/movements', {
-      params: itemId ? { itemId } : undefined,
-    });
-    return ensureArray<StockMovement>(response.data);
+    const { data, error } = await query;
+    if (error) throw new Error(error.message);
+    return ensureArray<StockMovement>(data);
   },
 
   addStock: async (itemId: string, quantity: number, notes?: string): Promise<StockMovement> => {
-    const response = await apiClient.post<StockMovement>('/inventory/movements', {
-      inventory_item_id: itemId,
-      movement_type: 'in',
-      quantity,
-      notes,
-    });
-    return response.data;
+    // Get current stock
+    const { data: item, error: itemError } = await supabase
+      .from('inventory_items')
+      .select('current_stock')
+      .eq('id', itemId)
+      .single();
+    
+    if (itemError) throw new Error(itemError.message);
+    
+    const previousStock = Number(item.current_stock);
+    const newStock = previousStock + quantity;
+
+    // Update inventory
+    await supabase
+      .from('inventory_items')
+      .update({ current_stock: newStock })
+      .eq('id', itemId);
+
+    // Create movement record
+    const { data, error } = await supabase
+      .from('stock_movements')
+      .insert({
+        inventory_item_id: itemId,
+        movement_type: 'in',
+        quantity,
+        previous_stock: previousStock,
+        new_stock: newStock,
+        notes,
+      })
+      .select()
+      .single();
+    
+    if (error) throw new Error(error.message);
+    return data as StockMovement;
   },
 
   removeStock: async (itemId: string, quantity: number, notes?: string): Promise<StockMovement> => {
-    const response = await apiClient.post<StockMovement>('/inventory/movements', {
-      inventory_item_id: itemId,
-      movement_type: 'out',
-      quantity,
-      notes,
-    });
-    return response.data;
+    // Get current stock
+    const { data: item, error: itemError } = await supabase
+      .from('inventory_items')
+      .select('current_stock')
+      .eq('id', itemId)
+      .single();
+    
+    if (itemError) throw new Error(itemError.message);
+    
+    const previousStock = Number(item.current_stock);
+    const newStock = Math.max(0, previousStock - quantity);
+
+    // Update inventory
+    await supabase
+      .from('inventory_items')
+      .update({ current_stock: newStock })
+      .eq('id', itemId);
+
+    // Create movement record
+    const { data, error } = await supabase
+      .from('stock_movements')
+      .insert({
+        inventory_item_id: itemId,
+        movement_type: 'out',
+        quantity,
+        previous_stock: previousStock,
+        new_stock: newStock,
+        notes,
+      })
+      .select()
+      .single();
+    
+    if (error) throw new Error(error.message);
+    return data as StockMovement;
   },
 
   adjustStock: async (itemId: string, newStockLevel: number, notes?: string): Promise<StockMovement> => {
-    const response = await apiClient.post<StockMovement>('/inventory/movements', {
-      inventory_item_id: itemId,
-      movement_type: 'adjustment',
-      new_stock: newStockLevel,
-      notes,
-    });
-    return response.data;
+    // Get current stock
+    const { data: item, error: itemError } = await supabase
+      .from('inventory_items')
+      .select('current_stock')
+      .eq('id', itemId)
+      .single();
+    
+    if (itemError) throw new Error(itemError.message);
+    
+    const previousStock = Number(item.current_stock);
+    const quantity = Math.abs(newStockLevel - previousStock);
+
+    // Update inventory
+    await supabase
+      .from('inventory_items')
+      .update({ current_stock: newStockLevel })
+      .eq('id', itemId);
+
+    // Create movement record
+    const { data, error } = await supabase
+      .from('stock_movements')
+      .insert({
+        inventory_item_id: itemId,
+        movement_type: 'adjustment',
+        quantity,
+        previous_stock: previousStock,
+        new_stock: newStockLevel,
+        notes,
+      })
+      .select()
+      .single();
+    
+    if (error) throw new Error(error.message);
+    return data as StockMovement;
   },
 
   // Suppliers
   getSuppliers: async (): Promise<Supplier[]> => {
-    // Lovable Cloud / Supabase reads
-    if (useSupabaseForReads()) {
-      const { data, error } = await supabase
-        .from('suppliers')
-        .select('*')
-        .order('created_at', { ascending: false });
-      if (!error) return ensureArray<Supplier>(data);
-      // Fall through to REST if available
-    }
-
-    const response = await apiClient.get<Supplier[]>('/suppliers');
-    return ensureArray<Supplier>(response.data);
+    const { data, error } = await supabase
+      .from('suppliers')
+      .select('*')
+      .order('created_at', { ascending: false });
+    
+    if (error) throw new Error(error.message);
+    return ensureArray<Supplier>(data);
   },
 
   getActiveSuppliers: async (): Promise<Supplier[]> => {
-    // Lovable Cloud / Supabase reads
-    if (useSupabaseForReads()) {
-      const { data, error } = await supabase
-        .from('suppliers')
-        .select('*')
-        .eq('is_active', true)
-        .order('created_at', { ascending: false });
-      if (!error) return ensureArray<Supplier>(data);
-      // Fall through to REST if available
-    }
-
-    const response = await apiClient.get<Supplier[]>('/suppliers', {
-      params: { active: true },
-    });
-    return ensureArray<Supplier>(response.data);
+    const { data, error } = await supabase
+      .from('suppliers')
+      .select('*')
+      .eq('is_active', true)
+      .order('created_at', { ascending: false });
+    
+    if (error) throw new Error(error.message);
+    return ensureArray<Supplier>(data);
   },
 
   getSupplier: async (id: string): Promise<Supplier> => {
-    const response = await apiClient.get<Supplier>(`/suppliers/${id}`);
-    return response.data;
+    const { data, error } = await supabase
+      .from('suppliers')
+      .select('*')
+      .eq('id', id)
+      .single();
+    
+    if (error) throw new Error(error.message);
+    return data as Supplier;
   },
 
   createSupplier: async (supplierData: Partial<Supplier>): Promise<Supplier> => {
-    const response = await apiClient.post<Supplier>('/suppliers', supplierData);
-    return response.data;
+    const { data, error } = await supabase
+      .from('suppliers')
+      .insert(supplierData)
+      .select()
+      .single();
+    
+    if (error) throw new Error(error.message);
+    return data as Supplier;
   },
 
   updateSupplier: async (id: string, supplierData: Partial<Supplier>): Promise<Supplier> => {
-    const response = await apiClient.patch<Supplier>(`/suppliers/${id}`, supplierData);
-    return response.data;
+    const { data, error } = await supabase
+      .from('suppliers')
+      .update(supplierData)
+      .eq('id', id)
+      .select()
+      .single();
+    
+    if (error) throw new Error(error.message);
+    return data as Supplier;
   },
 
   deleteSupplier: async (id: string): Promise<void> => {
-    await apiClient.delete(`/suppliers/${id}`);
+    const { error } = await supabase
+      .from('suppliers')
+      .delete()
+      .eq('id', id);
+    
+    if (error) throw new Error(error.message);
   },
 };
-
