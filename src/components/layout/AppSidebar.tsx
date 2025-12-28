@@ -58,7 +58,7 @@ const managementNavItems: NavItem[] = [
   { title: 'Staff', url: '/staff', icon: Users, roles: ['super_admin', 'manager'] },
   { title: 'Customers', url: '/customers', icon: Heart, roles: ['super_admin', 'manager', 'cashier'] },
   { title: 'Reports', url: '/reports', icon: BarChart3, roles: ['super_admin', 'manager', 'accountant'] },
-  { title: 'Settings', url: '/settings', icon: Settings, roles: ['super_admin', 'manager'] },
+  { title: 'Settings', url: '/settings', icon: Settings, roles: ['super_admin'] },
   { title: 'Data Import', url: '/data-import', icon: Download, roles: ['super_admin'] },
   { title: 'Data Sync', url: '/data-sync', icon: DatabaseBackup, roles: ['super_admin'] },
 ];

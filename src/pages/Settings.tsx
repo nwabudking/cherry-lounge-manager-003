@@ -1,10 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSettings, useUpdateSettings } from "@/hooks/useSettings";
 import { authApi } from "@/lib/api/auth";
 import { toast } from "sonner";
-import { Settings as SettingsIcon, Building2, Receipt, User, Globe, Save, Loader2 } from "lucide-react";
+import { Settings as SettingsIcon, Building2, Receipt, User, Globe, Save, Loader2, ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
+import { Navigate } from "react-router-dom";
 import {
   Select,
   SelectContent,
@@ -56,19 +57,25 @@ const Settings = () => {
   const { user, role } = useAuth();
   const [activeTab, setActiveTab] = useState("restaurant");
   const [restaurantForm, setRestaurantForm] = useState<RestaurantSettingsForm>({});
-  const [profileForm, setProfileForm] = useState<{ full_name?: string | null }>({});
+  const [formInitialized, setFormInitialized] = useState(false);
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
 
-  const canEditSettings = role === "super_admin" || role === "manager";
+  // Only super_admin can access settings
+  if (role !== "super_admin") {
+    return <Navigate to="/dashboard" replace />;
+  }
 
   const { data: settings, isLoading: settingsLoading } = useSettings();
   const updateSettingsMutation = useUpdateSettings();
 
-  // Initialize form when settings load
-  if (settings && !restaurantForm.name) {
-    setRestaurantForm(settings);
-  }
+  // Initialize form when settings load - using useEffect to avoid render-time state update
+  useEffect(() => {
+    if (settings && !formInitialized) {
+      setRestaurantForm(settings);
+      setFormInitialized(true);
+    }
+  }, [settings, formInitialized]);
 
   const changePasswordMutation = useMutation({
     mutationFn: async () => {
@@ -148,7 +155,6 @@ const Settings = () => {
                     id="name"
                     value={restaurantForm.name || ""}
                     onChange={(e) => setRestaurantForm({ ...restaurantForm, name: e.target.value })}
-                    disabled={!canEditSettings}
                   />
                 </div>
                 <div className="space-y-2">
@@ -157,7 +163,6 @@ const Settings = () => {
                     id="tagline"
                     value={restaurantForm.tagline || ""}
                     onChange={(e) => setRestaurantForm({ ...restaurantForm, tagline: e.target.value })}
-                    disabled={!canEditSettings}
                   />
                 </div>
               </div>
@@ -168,20 +173,17 @@ const Settings = () => {
                   id="address"
                   value={restaurantForm.address || ""}
                   onChange={(e) => setRestaurantForm({ ...restaurantForm, address: e.target.value })}
-                  disabled={!canEditSettings}
                 />
               </div>
 
-              {canEditSettings && (
-                <Button onClick={handleSaveRestaurant} disabled={updateSettingsMutation.isPending}>
-                  {updateSettingsMutation.isPending ? (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  ) : (
-                    <Save className="h-4 w-4 mr-2" />
-                  )}
-                  Save Changes
-                </Button>
-              )}
+              <Button onClick={handleSaveRestaurant} disabled={updateSettingsMutation.isPending}>
+                {updateSettingsMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Save className="h-4 w-4 mr-2" />
+                )}
+                Save Changes
+              </Button>
             </CardContent>
           </Card>
         </TabsContent>
@@ -199,7 +201,6 @@ const Settings = () => {
                   onCheckedChange={(checked) =>
                     setRestaurantForm({ ...restaurantForm, receipt_show_logo: checked })
                   }
-                  disabled={!canEditSettings}
                 />
               </div>
 
@@ -212,20 +213,17 @@ const Settings = () => {
                     setRestaurantForm({ ...restaurantForm, receipt_footer: e.target.value })
                   }
                   rows={3}
-                  disabled={!canEditSettings}
                 />
               </div>
 
-              {canEditSettings && (
-                <Button onClick={handleSaveRestaurant} disabled={updateSettingsMutation.isPending}>
-                  {updateSettingsMutation.isPending ? (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  ) : (
-                    <Save className="h-4 w-4 mr-2" />
-                  )}
-                  Save Changes
-                </Button>
-              )}
+              <Button onClick={handleSaveRestaurant} disabled={updateSettingsMutation.isPending}>
+                {updateSettingsMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Save className="h-4 w-4 mr-2" />
+                )}
+                Save Changes
+              </Button>
             </CardContent>
           </Card>
         </TabsContent>

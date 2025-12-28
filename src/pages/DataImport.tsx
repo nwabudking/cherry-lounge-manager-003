@@ -3,9 +3,11 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
-import { Loader2, Database, CheckCircle2, Upload } from "lucide-react";
+import { Loader2, Database, CheckCircle2, Upload, Download, Save } from "lucide-react";
 import { Navigate } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
 import apiClient from "@/lib/api/client";
+import { useSupabaseForReads } from "@/lib/db/environment";
 
 // CSV data imports
 import menuCategoriesCSV from "@/data/menu_categories.csv?raw";
@@ -18,6 +20,19 @@ interface ImportResults {
   inventory_items?: { inserted: number; errors: string[] };
   menu_items?: { inserted: number; errors: string[] };
   restaurant_settings?: { inserted: number; errors: string[] };
+}
+
+interface BackupData {
+  menu_categories: any[];
+  inventory_items: any[];
+  menu_items: any[];
+  restaurant_settings: any[];
+  orders: any[];
+  order_items: any[];
+  payments: any[];
+  stock_movements: any[];
+  suppliers: any[];
+  exported_at: string;
 }
 
 // Parse CSV with semicolon delimiter
@@ -57,10 +72,27 @@ function parseValue(value: string, type: 'string' | 'number' | 'boolean' | 'uuid
   }
 }
 
+// Convert array to CSV
+function arrayToCSV(data: any[], headers: string[]): string {
+  const csvRows = [headers.join(';')];
+  for (const row of data) {
+    const values = headers.map(h => {
+      const val = row[h];
+      if (val === null || val === undefined) return '';
+      if (typeof val === 'boolean') return val.toString();
+      return String(val);
+    });
+    csvRows.push(values.join(';'));
+  }
+  return csvRows.join('\n');
+}
+
 export default function DataImport() {
   const { role } = useAuth();
   const [isImporting, setIsImporting] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const [results, setResults] = useState<ImportResults | null>(null);
+  const [backupInfo, setBackupInfo] = useState<{ date: string; counts: Record<string, number> } | null>(null);
 
   if (role !== "super_admin") {
     return <Navigate to="/dashboard" replace />;
@@ -130,16 +162,59 @@ export default function DataImport() {
         settings: settingsData.length
       });
 
-      // Call the REST API
-      const response = await apiClient.post<{ results: ImportResults }>('/data/import', {
-        menu_categories: categoriesData,
-        inventory_items: inventoryData,
-        menu_items: menuData,
-        restaurant_settings: settingsData
-      });
+      // Import to Supabase if available
+      if (useSupabaseForReads()) {
+        const importResults: ImportResults = {};
 
-      setResults(response.data.results);
-      toast.success("Data import completed!");
+        // Import categories
+        const { error: catError } = await supabase
+          .from('menu_categories')
+          .upsert(categoriesData, { onConflict: 'id' });
+        importResults.menu_categories = {
+          inserted: categoriesData.length,
+          errors: catError ? [catError.message] : []
+        };
+
+        // Import inventory
+        const { error: invError } = await supabase
+          .from('inventory_items')
+          .upsert(inventoryData, { onConflict: 'id' });
+        importResults.inventory_items = {
+          inserted: inventoryData.length,
+          errors: invError ? [invError.message] : []
+        };
+
+        // Import menu items
+        const { error: menuError } = await supabase
+          .from('menu_items')
+          .upsert(menuData, { onConflict: 'id' });
+        importResults.menu_items = {
+          inserted: menuData.length,
+          errors: menuError ? [menuError.message] : []
+        };
+
+        // Import settings
+        const { error: settingsError } = await supabase
+          .from('restaurant_settings')
+          .upsert(settingsData, { onConflict: 'id' });
+        importResults.restaurant_settings = {
+          inserted: settingsData.length,
+          errors: settingsError ? [settingsError.message] : []
+        };
+
+        setResults(importResults);
+        toast.success("Data import completed!");
+      } else {
+        // Call the REST API for Docker/MySQL
+        const response = await apiClient.post<{ results: ImportResults }>('/data/import', {
+          menu_categories: categoriesData,
+          inventory_items: inventoryData,
+          menu_items: menuData,
+          restaurant_settings: settingsData
+        });
+        setResults(response.data.results);
+        toast.success("Data import completed!");
+      }
     } catch (error) {
       console.error("Import error:", error);
       toast.error(error instanceof Error ? error.message : "Import failed");
@@ -148,112 +223,229 @@ export default function DataImport() {
     }
   };
 
+  const handleExportBackup = async () => {
+    setIsExporting(true);
+    setBackupInfo(null);
+
+    try {
+      let backupData: BackupData;
+
+      if (useSupabaseForReads()) {
+        // Export from Supabase
+        const [
+          { data: categories },
+          { data: inventory },
+          { data: menu },
+          { data: settings },
+          { data: orders },
+          { data: orderItems },
+          { data: payments },
+          { data: movements },
+          { data: suppliers }
+        ] = await Promise.all([
+          supabase.from('menu_categories').select('*'),
+          supabase.from('inventory_items').select('*'),
+          supabase.from('menu_items').select('*'),
+          supabase.from('restaurant_settings').select('*'),
+          supabase.from('orders').select('*'),
+          supabase.from('order_items').select('*'),
+          supabase.from('payments').select('*'),
+          supabase.from('stock_movements').select('*'),
+          supabase.from('suppliers').select('*'),
+        ]);
+
+        backupData = {
+          menu_categories: categories || [],
+          inventory_items: inventory || [],
+          menu_items: menu || [],
+          restaurant_settings: settings || [],
+          orders: orders || [],
+          order_items: orderItems || [],
+          payments: payments || [],
+          stock_movements: movements || [],
+          suppliers: suppliers || [],
+          exported_at: new Date().toISOString(),
+        };
+      } else {
+        // Export from REST API
+        const [categories, inventory, menu, orders] = await Promise.all([
+          apiClient.get('/menu/categories').then(r => r.data || []),
+          apiClient.get('/inventory/items').then(r => r.data || []),
+          apiClient.get('/menu/items').then(r => r.data || []),
+          apiClient.get('/orders').then(r => r.data || []),
+        ]);
+
+        backupData = {
+          menu_categories: Array.isArray(categories) ? categories : [],
+          inventory_items: Array.isArray(inventory) ? inventory : [],
+          menu_items: Array.isArray(menu) ? menu : [],
+          restaurant_settings: [],
+          orders: Array.isArray(orders) ? orders : [],
+          order_items: [],
+          payments: [],
+          stock_movements: [],
+          suppliers: [],
+          exported_at: new Date().toISOString(),
+        };
+      }
+
+      // Download as JSON backup
+      const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `restaurant-backup-${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      setBackupInfo({
+        date: new Date().toLocaleString(),
+        counts: {
+          menu_categories: backupData.menu_categories.length,
+          inventory_items: backupData.inventory_items.length,
+          menu_items: backupData.menu_items.length,
+          orders: backupData.orders.length,
+          suppliers: backupData.suppliers.length,
+        }
+      });
+
+      toast.success("Backup exported successfully!");
+    } catch (error) {
+      console.error("Export error:", error);
+      toast.error(error instanceof Error ? error.message : "Export failed");
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   return (
     <div className="p-6 space-y-6">
       <div className="max-w-3xl mx-auto space-y-6">
         <div>
-          <h1 className="text-3xl font-bold">Data Import</h1>
+          <h1 className="text-3xl font-bold">Data Management</h1>
           <p className="text-muted-foreground mt-2">
-            Import your previous restaurant data including menu items, inventory, and categories.
+            Import and export your restaurant data for backup and migration.
           </p>
         </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Database className="h-5 w-5" />
-              Import Previous Data
-            </CardTitle>
-            <CardDescription>
-              This will import your exported data including:
-              <ul className="list-disc list-inside mt-2 space-y-1">
-                <li>60 Menu Categories</li>
-                <li>336 Menu Items</li>
-                <li>422 Inventory Items</li>
-                <li>Restaurant Settings</li>
-              </ul>
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <Button
-              onClick={handleImport}
-              disabled={isImporting}
-              className="w-full"
-              size="lg"
-            >
-              {isImporting ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Importing Data...
-                </>
-              ) : (
-                <>
-                  <Upload className="mr-2 h-4 w-4" />
-                  Import All Data
-                </>
-              )}
-            </Button>
-
-            {results && (
-              <div className="space-y-4 mt-6">
-                <h3 className="text-lg font-semibold flex items-center gap-2">
-                  <CheckCircle2 className="h-5 w-5 text-emerald-500" />
-                  Import Results
-                </h3>
-                
-                <div className="grid gap-3">
-                  {results.menu_categories && (
-                    <div className="p-3 bg-muted rounded-lg">
-                      <p className="font-medium">Menu Categories</p>
-                      <p className="text-sm text-muted-foreground">
-                        {results.menu_categories.inserted} inserted
-                        {results.menu_categories.errors.length > 0 && (
-                          <span className="text-destructive"> ({results.menu_categories.errors.length} errors)</span>
-                        )}
-                      </p>
-                    </div>
-                  )}
-                  
-                  {results.inventory_items && (
-                    <div className="p-3 bg-muted rounded-lg">
-                      <p className="font-medium">Inventory Items</p>
-                      <p className="text-sm text-muted-foreground">
-                        {results.inventory_items.inserted} inserted
-                        {results.inventory_items.errors.length > 0 && (
-                          <span className="text-destructive"> ({results.inventory_items.errors.length} errors)</span>
-                        )}
-                      </p>
-                    </div>
-                  )}
-                  
-                  {results.menu_items && (
-                    <div className="p-3 bg-muted rounded-lg">
-                      <p className="font-medium">Menu Items</p>
-                      <p className="text-sm text-muted-foreground">
-                        {results.menu_items.inserted} inserted
-                        {results.menu_items.errors.length > 0 && (
-                          <span className="text-destructive"> ({results.menu_items.errors.length} errors)</span>
-                        )}
-                      </p>
-                    </div>
-                  )}
-                  
-                  {results.restaurant_settings && (
-                    <div className="p-3 bg-muted rounded-lg">
-                      <p className="font-medium">Restaurant Settings</p>
-                      <p className="text-sm text-muted-foreground">
-                        {results.restaurant_settings.inserted} inserted
-                        {results.restaurant_settings.errors.length > 0 && (
-                          <span className="text-destructive"> ({results.restaurant_settings.errors.length} errors)</span>
-                        )}
-                      </p>
-                    </div>
-                  )}
-                </div>
+        <div className="grid gap-6 md:grid-cols-2">
+          {/* Import Card */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Upload className="h-5 w-5" />
+                Import Data
+              </CardTitle>
+              <CardDescription>
+                Import data from CSV files stored in the project folder.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="text-sm text-muted-foreground space-y-1">
+                <p>• Menu Categories</p>
+                <p>• Inventory Items</p>
+                <p>• Menu Items</p>
+                <p>• Restaurant Settings</p>
               </div>
-            )}
-          </CardContent>
-        </Card>
+              <Button
+                onClick={handleImport}
+                disabled={isImporting}
+                className="w-full"
+              >
+                {isImporting ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Importing...
+                  </>
+                ) : (
+                  <>
+                    <Database className="mr-2 h-4 w-4" />
+                    Import All Data
+                  </>
+                )}
+              </Button>
+
+              {results && (
+                <div className="space-y-2 pt-4 border-t">
+                  <h4 className="font-medium flex items-center gap-2 text-sm">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                    Import Results
+                  </h4>
+                  <div className="text-sm space-y-1">
+                    {results.menu_categories && (
+                      <p>Categories: {results.menu_categories.inserted} imported</p>
+                    )}
+                    {results.inventory_items && (
+                      <p>Inventory: {results.inventory_items.inserted} imported</p>
+                    )}
+                    {results.menu_items && (
+                      <p>Menu Items: {results.menu_items.inserted} imported</p>
+                    )}
+                    {results.restaurant_settings && (
+                      <p>Settings: {results.restaurant_settings.inserted} imported</p>
+                    )}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Export/Backup Card */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Download className="h-5 w-5" />
+                Export Backup
+              </CardTitle>
+              <CardDescription>
+                Download a complete backup of all your data as JSON.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="text-sm text-muted-foreground space-y-1">
+                <p>• All menu data</p>
+                <p>• Inventory & suppliers</p>
+                <p>• Orders & payments</p>
+                <p>• Stock movements</p>
+              </div>
+              <Button
+                onClick={handleExportBackup}
+                disabled={isExporting}
+                variant="outline"
+                className="w-full"
+              >
+                {isExporting ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Exporting...
+                  </>
+                ) : (
+                  <>
+                    <Save className="mr-2 h-4 w-4" />
+                    Download Backup
+                  </>
+                )}
+              </Button>
+
+              {backupInfo && (
+                <div className="space-y-2 pt-4 border-t">
+                  <h4 className="font-medium flex items-center gap-2 text-sm">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                    Backup Complete
+                  </h4>
+                  <p className="text-xs text-muted-foreground">{backupInfo.date}</p>
+                  <div className="text-sm space-y-1">
+                    {Object.entries(backupInfo.counts).map(([key, count]) => (
+                      <p key={key}>{key.replace('_', ' ')}: {count} records</p>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </div>
   );
