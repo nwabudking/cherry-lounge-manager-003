@@ -34,6 +34,7 @@ interface StaffTableProps {
 
 const roleConfig: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
   super_admin: { label: "Super Admin", variant: "destructive" },
+  admin: { label: "Admin", variant: "destructive" },
   manager: { label: "Manager", variant: "default" },
   cashier: { label: "Cashier", variant: "secondary" },
   bar_staff: { label: "Bar Staff", variant: "outline" },
