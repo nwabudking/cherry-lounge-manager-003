@@ -35,6 +35,20 @@ const ensureArray = <T,>(value: unknown): T[] => {
   return [];
 };
 
+const getFunctionErrorMessage = (error: unknown) => {
+  if (!error) return 'Unknown error';
+  if (error instanceof Error) {
+    const anyErr = error as unknown as { context?: { status?: number; body?: unknown } };
+    const status = anyErr?.context?.status;
+    const body = anyErr?.context?.body;
+    const bodyMsg = typeof body === 'string' ? body : body && typeof body === 'object' && 'error' in (body as any)
+      ? String((body as any).error)
+      : undefined;
+    return [status ? `(${status})` : undefined, bodyMsg || error.message].filter(Boolean).join(' ');
+  }
+  return String(error);
+};
+
 async function getStaffFromCloud(): Promise<StaffMember[]> {
   // Profiles (admins see all, others see own due to policies)
   const profilesRes = await supabase
@@ -113,7 +127,7 @@ export const staffApi = {
         role: data.role,
       },
     });
-    if (error) throw new Error(error.message);
+    if (error) throw new Error(getFunctionErrorMessage(error));
     if (!result?.success || !result?.user?.id) throw new Error(result?.error || 'Failed to create staff');
 
     return {
@@ -137,7 +151,7 @@ export const staffApi = {
         role: data.role,
       },
     });
-    if (error) throw new Error(error.message);
+    if (error) throw new Error(getFunctionErrorMessage(error));
 
     // Return the updated row by refetching
     return await staffApi.getStaffMember(id);
@@ -151,22 +165,22 @@ export const staffApi = {
         newEmail,
       },
     });
-    if (error) throw new Error(error.message);
-    if (data?.error) throw new Error(data.error);
+    if (error) throw new Error(getFunctionErrorMessage(error));
+    if (data?.error) throw new Error(String(data.error));
   },
 
   deleteStaff: async (id: string): Promise<void> => {
     const { error } = await supabase.functions.invoke('manage-staff', {
       body: { action: 'delete', userId: id },
     });
-    if (error) throw new Error(error.message);
+    if (error) throw new Error(getFunctionErrorMessage(error));
   },
 
   resetPassword: async (id: string, newPassword: string): Promise<void> => {
     const { error } = await supabase.functions.invoke('reset-staff-password', {
       body: { userId: id, newPassword },
     });
-    if (error) throw new Error(error.message);
+    if (error) throw new Error(getFunctionErrorMessage(error));
   },
 
   updateRole: async (id: string, role: string): Promise<StaffMember> => {
