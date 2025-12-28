@@ -86,13 +86,17 @@ export const AddEditStaffDialog = ({
 
   const canUpdateEmail = currentUserRole === "super_admin" && isEditing;
 
+  // Check if the staff's current role is in assignable roles (for display purposes)
+  const staffRoleInAssignable = staff?.role && assignableRoles.some(r => r.value === staff.role);
+
   useEffect(() => {
     if (staff && isEditing) {
       setFormData({
         email: staff.email || "",
         password: "",
         fullName: staff.full_name || "",
-        role: staff.role || "cashier",
+        // Keep current role if not assignable (user can't change it)
+        role: (staff.role as AppRole) || defaultRole,
         newEmail: staff.email || "",
       });
     } else {
@@ -125,8 +129,9 @@ export const AddEditStaffDialog = ({
     }
   };
 
+  // For editing, always valid (name is optional). For creating, email and password required.
   const isValid = isEditing 
-    ? formData.fullName.trim() !== ""
+    ? true
     : formData.email.trim() !== "" && formData.password.length >= 6;
 
   return (
@@ -200,21 +205,30 @@ export const AddEditStaffDialog = ({
 
           <div className="space-y-2">
             <Label htmlFor="role">Role *</Label>
-            <Select
-              value={formData.role}
-              onValueChange={(value) => setFormData({ ...formData, role: value as AppRole })}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {assignableRoles.map((role) => (
-                  <SelectItem key={role.value} value={role.value}>
-                    {role.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {isEditing && !staffRoleInAssignable ? (
+              // Show current role as read-only if user can't change it
+              <Input
+                value={allRoles.find(r => r.value === staff?.role)?.label || staff?.role || "Unknown"}
+                disabled
+                className="bg-muted"
+              />
+            ) : (
+              <Select
+                value={formData.role}
+                onValueChange={(value) => setFormData({ ...formData, role: value as AppRole })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {assignableRoles.map((role) => (
+                    <SelectItem key={role.value} value={role.value}>
+                      {role.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
           </div>
 
           <div className="flex gap-2 justify-end pt-4">
