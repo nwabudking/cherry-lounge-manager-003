@@ -2,10 +2,13 @@ import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { useOrders, useUpdateOrderStatus } from "@/hooks/useOrders";
+import { useUserRole } from "@/hooks/useUserRole";
 import { OrdersHeader } from "@/components/orders/OrdersHeader";
 import { OrdersFilters } from "@/components/orders/OrdersFilters";
 import { OrdersTable } from "@/components/orders/OrdersTable";
 import { OrderDetailsDialog } from "@/components/orders/OrderDetailsDialog";
+import { Badge } from "@/components/ui/badge";
+import { User } from "lucide-react";
 import type { Order, OrderItem } from "@/lib/api/orders";
 
 export type OrderWithItems = Order & {
@@ -23,6 +26,11 @@ export type OrderStatus = "pending" | "preparing" | "ready" | "completed" | "can
 const Orders = () => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { permissions, getFilterUserId, role, isPrivilegedUser } = useUserRole();
+
+  // Get the filter user ID for non-privileged users
+  const filterUserId = getFilterUserId();
+  const isPersonalView = !!filterUserId;
 
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [orderTypeFilter, setOrderTypeFilter] = useState<string>("all");
@@ -40,6 +48,7 @@ const Orders = () => {
     endDate: dateFilter
       ? new Date(dateFilter.setHours(23, 59, 59, 999)).toISOString()
       : undefined,
+    createdBy: filterUserId || undefined,
   });
   const orders = Array.isArray(rawOrders) ? rawOrders : [];
 
@@ -64,12 +73,40 @@ const Orders = () => {
     ["completed", "cancelled"].includes(o.status)
   );
 
+  const getRoleDisplayName = (role: string | null) => {
+    if (!role) return "";
+    return role.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase());
+  };
+
   return (
     <div className="space-y-6">
-      <OrdersHeader
-        activeCount={activeOrders.length}
-        completedCount={completedOrders.length}
-      />
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <OrdersHeader
+          activeCount={activeOrders.length}
+          completedCount={completedOrders.length}
+        />
+        <div className="flex items-center gap-2">
+          {isPersonalView && (
+            <Badge variant="outline" className="flex items-center gap-1">
+              <User className="w-3 h-3" />
+              My Orders
+            </Badge>
+          )}
+          {role && (
+            <Badge variant="secondary">
+              {getRoleDisplayName(role)}
+            </Badge>
+          )}
+        </div>
+      </div>
+
+      {isPersonalView && (
+        <div className="bg-muted/50 border border-border rounded-lg p-4">
+          <p className="text-sm text-muted-foreground">
+            You are viewing your own orders only. Contact a manager to view all orders.
+          </p>
+        </div>
+      )}
 
       <OrdersFilters
         statusFilter={statusFilter}

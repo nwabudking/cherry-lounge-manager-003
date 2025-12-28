@@ -7,6 +7,10 @@ import { TopItemsChart } from "@/components/reports/TopItemsChart";
 import { SalesByType } from "@/components/reports/SalesByType";
 import { startOfDay, endOfDay, subDays, format } from "date-fns";
 import { ordersApi } from "@/lib/api/orders";
+import { useUserRole } from "@/hooks/useUserRole";
+import { Badge } from "@/components/ui/badge";
+import { User, AlertCircle } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
 
 export type DateRange = "today" | "7days" | "30days" | "custom";
 
@@ -24,6 +28,11 @@ const Reports = () => {
   const [dateRange, setDateRange] = useState<DateRange>("7days");
   const [customStart, setCustomStart] = useState<Date | undefined>();
   const [customEnd, setCustomEnd] = useState<Date | undefined>();
+  const { permissions, getFilterUserId, role, isPrivilegedUser } = useUserRole();
+
+  // Get the filter user ID for non-privileged users
+  const filterUserId = getFilterUserId();
+  const isPersonalView = !!filterUserId;
 
   const getDateFilter = () => {
     const now = new Date();
@@ -44,12 +53,13 @@ const Reports = () => {
 
   const { start, end } = getDateFilter();
 
-  const { data: orders = [], isLoading } = useQuery({
-    queryKey: ["reports-orders", dateRange, customStart, customEnd],
+  const { data: orders = [], isLoading, error } = useQuery({
+    queryKey: ["reports-orders", dateRange, customStart, customEnd, filterUserId],
     queryFn: async () => {
       const data = await ordersApi.getCompletedOrdersByDate(
         start.toISOString(),
-        end.toISOString()
+        end.toISOString(),
+        filterUserId || undefined
       );
       return data as OrderWithDetails[];
     },
@@ -110,16 +120,69 @@ const Reports = () => {
     return acc;
   }, {} as Record<string, number>);
 
+  const getRoleDisplayName = (role: string | null) => {
+    if (!role) return "";
+    return role.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase());
+  };
+
+  // Show error state
+  if (error) {
+    return (
+      <div className="space-y-6">
+        <ReportsHeader
+          dateRange={dateRange}
+          setDateRange={setDateRange}
+          customStart={customStart}
+          setCustomStart={setCustomStart}
+          customEnd={customEnd}
+          setCustomEnd={setCustomEnd}
+        />
+        <Card className="border-destructive/50">
+          <CardContent className="flex flex-col items-center justify-center py-12">
+            <AlertCircle className="w-12 h-12 text-destructive mb-4" />
+            <h3 className="text-lg font-semibold text-foreground mb-2">Unable to Load Reports</h3>
+            <p className="text-muted-foreground text-center max-w-md">
+              There was a problem loading your reports data. Please try again or contact support if the issue persists.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
-      <ReportsHeader
-        dateRange={dateRange}
-        setDateRange={setDateRange}
-        customStart={customStart}
-        setCustomStart={setCustomStart}
-        customEnd={customEnd}
-        setCustomEnd={setCustomEnd}
-      />
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <ReportsHeader
+          dateRange={dateRange}
+          setDateRange={setDateRange}
+          customStart={customStart}
+          setCustomStart={setCustomStart}
+          customEnd={customEnd}
+          setCustomEnd={setCustomEnd}
+        />
+        <div className="flex items-center gap-2">
+          {isPersonalView && (
+            <Badge variant="outline" className="flex items-center gap-1">
+              <User className="w-3 h-3" />
+              Personal Report
+            </Badge>
+          )}
+          {role && (
+            <Badge variant="secondary">
+              {getRoleDisplayName(role)}
+            </Badge>
+          )}
+        </div>
+      </div>
+
+      {isPersonalView && (
+        <div className="bg-muted/50 border border-border rounded-lg p-4">
+          <p className="text-sm text-muted-foreground">
+            You are viewing your personal sales report. Only orders you created are included in these metrics.
+          </p>
+        </div>
+      )}
 
       <SalesMetrics
         totalRevenue={totalRevenue}

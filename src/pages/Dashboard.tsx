@@ -1,8 +1,10 @@
 import { useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
+import { useUserRole } from "@/hooks/useUserRole";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Badge } from "@/components/ui/badge";
 import { LowStockDialog } from "@/components/dashboard/LowStockDialog";
 import { ordersApi } from "@/lib/api/orders";
 import { inventoryApi } from "@/lib/api/inventory";
@@ -16,6 +18,7 @@ import {
   Users,
   Clock,
   Utensils,
+  User,
 } from "lucide-react";
 import { format, startOfDay, endOfDay } from "date-fns";
 
@@ -76,28 +79,35 @@ const KPICard = ({
 
 const Dashboard = () => {
   const { user } = useAuth();
+  const { permissions, getFilterUserId, role, isPrivilegedUser } = useUserRole();
   const [lowStockDialogOpen, setLowStockDialogOpen] = useState(false);
   const today = new Date();
   const todayStart = startOfDay(today);
   const todayEnd = endOfDay(today);
 
-  // Fetch today's orders
-  const { data: rawTodayOrders, isLoading: ordersLoading } = useQuery({
-    queryKey: ["dashboard-orders", format(today, "yyyy-MM-dd")],
+  // Get the filter user ID for non-privileged users
+  const filterUserId = getFilterUserId();
+  const isPersonalView = !!filterUserId;
+
+  // Fetch today's orders (filtered by user for cashiers)
+  const { data: rawTodayOrders, isLoading: ordersLoading, error: ordersError } = useQuery({
+    queryKey: ["dashboard-orders", format(today, "yyyy-MM-dd"), filterUserId],
     queryFn: async () => {
       const orders = await ordersApi.getOrders({
         startDate: todayStart.toISOString(),
         endDate: todayEnd.toISOString(),
+        createdBy: filterUserId || undefined,
       });
       return orders;
     },
   });
   const todayOrders = Array.isArray(rawTodayOrders) ? rawTodayOrders : [];
 
-  // Fetch low stock items
+  // Fetch low stock items (only for users with inventory permissions)
   const { data: rawLowStockItems, isLoading: inventoryLoading } = useQuery({
     queryKey: ["dashboard-low-stock"],
     queryFn: () => inventoryApi.getLowStockItems(),
+    enabled: permissions.canManageInventory || isPrivilegedUser(),
   });
   const lowStockItems = Array.isArray(rawLowStockItems) ? rawLowStockItems : [];
 
@@ -107,7 +117,6 @@ const Dashboard = () => {
     queryFn: () => menuApi.getActiveMenuItems(),
   });
   const menuItems = Array.isArray(rawMenuItems) ? rawMenuItems : [];
-
   const menuItemsCount = menuItems.length;
 
   // Calculate metrics
@@ -171,24 +180,50 @@ const Dashboard = () => {
     return "Good evening";
   };
 
+  const getRoleDisplayName = (role: string | null) => {
+    if (!role) return "";
+    return role.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase());
+  };
+
   const isLoading = ordersLoading || inventoryLoading;
+
+  // Show inventory stats only for privileged users
+  const showInventoryStats = permissions.canManageInventory || isPrivilegedUser();
 
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Welcome header */}
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">
-          {getGreeting()}, {user?.full_name?.split(" ")[0] || "there"}!
-        </h1>
-        <p className="text-muted-foreground">
-          Here's what's happening at Cherry Dining Lounge today.
-        </p>
+      {/* Welcome header with role indicator */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">
+            {getGreeting()}, {user?.full_name?.split(" ")[0] || "there"}!
+          </h1>
+          <p className="text-muted-foreground">
+            {isPersonalView 
+              ? "Here's your personal sales summary for today."
+              : "Here's what's happening at Cherry Dining Lounge today."
+            }
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          {isPersonalView && (
+            <Badge variant="outline" className="flex items-center gap-1">
+              <User className="w-3 h-3" />
+              Personal View
+            </Badge>
+          )}
+          {role && (
+            <Badge variant="secondary">
+              {getRoleDisplayName(role)}
+            </Badge>
+          )}
+        </div>
       </div>
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <KPICard
-          title="Today's Sales"
+          title={isPersonalView ? "Your Sales Today" : "Today's Sales"}
           value={`₦${dailySales.toLocaleString()}`}
           change={`${completedOrders.length} orders completed`}
           changeType="positive"
@@ -197,7 +232,7 @@ const Dashboard = () => {
           isLoading={isLoading}
         />
         <KPICard
-          title="Active Orders"
+          title={isPersonalView ? "Your Active Orders" : "Active Orders"}
           value={activeOrders.length.toString()}
           change={`${activeOrders.filter((o) => o.status === "pending").length} pending`}
           changeType="neutral"
@@ -212,27 +247,40 @@ const Dashboard = () => {
           icon={Grid3X3}
           isLoading={isLoading}
         />
-        <div
-          onClick={() => lowStockItems.length > 0 && setLowStockDialogOpen(true)}
-          className={lowStockItems.length > 0 ? "cursor-pointer" : ""}
-        >
+        {showInventoryStats ? (
+          <div
+            onClick={() => lowStockItems.length > 0 && setLowStockDialogOpen(true)}
+            className={lowStockItems.length > 0 ? "cursor-pointer" : ""}
+          >
+            <KPICard
+              title="Low Stock Alerts"
+              value={lowStockItems.length.toString()}
+              change={lowStockItems.length > 0 ? "Click to view items" : "All stocked"}
+              changeType={lowStockItems.length > 0 ? "negative" : "positive"}
+              icon={AlertTriangle}
+              isLoading={isLoading}
+            />
+          </div>
+        ) : (
           <KPICard
-            title="Low Stock Alerts"
-            value={lowStockItems.length.toString()}
-            change={lowStockItems.length > 0 ? "Click to view items" : "All stocked"}
-            changeType={lowStockItems.length > 0 ? "negative" : "positive"}
-            icon={AlertTriangle}
+            title={isPersonalView ? "Your Avg. Order" : "Avg. Order Value"}
+            value={`₦${avgOrderValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}`}
+            change="Per order"
+            changeType="neutral"
+            icon={TrendingUp}
             isLoading={isLoading}
           />
-        </div>
+        )}
       </div>
 
       {/* Low Stock Dialog */}
-      <LowStockDialog
-        open={lowStockDialogOpen}
-        onOpenChange={setLowStockDialogOpen}
-        items={lowStockItems}
-      />
+      {showInventoryStats && (
+        <LowStockDialog
+          open={lowStockDialogOpen}
+          onOpenChange={setLowStockDialogOpen}
+          items={lowStockItems}
+        />
+      )}
 
       {/* Content Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -241,7 +289,7 @@ const Dashboard = () => {
           <CardHeader>
             <CardTitle className="text-lg font-semibold text-foreground flex items-center gap-2">
               <Clock className="w-5 h-5 text-primary" />
-              Recent Orders
+              {isPersonalView ? "Your Recent Orders" : "Recent Orders"}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -251,9 +299,13 @@ const Dashboard = () => {
                   <Skeleton key={i} className="h-16 w-full" />
                 ))}
               </div>
+            ) : ordersError ? (
+              <p className="text-destructive text-center py-8">
+                Unable to load orders. Please try again.
+              </p>
             ) : recentOrders.length === 0 ? (
               <p className="text-muted-foreground text-center py-8">
-                No orders yet today
+                {isPersonalView ? "You haven't created any orders today" : "No orders yet today"}
               </p>
             ) : (
               <div className="space-y-4">
@@ -299,7 +351,7 @@ const Dashboard = () => {
           <CardHeader>
             <CardTitle className="text-lg font-semibold text-foreground flex items-center gap-2">
               <TrendingUp className="w-5 h-5 text-primary" />
-              Top Selling Today
+              {isPersonalView ? "Your Top Sales Today" : "Top Selling Today"}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -311,7 +363,7 @@ const Dashboard = () => {
               </div>
             ) : topSellingItems.length === 0 ? (
               <p className="text-muted-foreground text-center py-8">
-                No sales yet today
+                {isPersonalView ? "No sales recorded yet" : "No sales yet today"}
               </p>
             ) : (
               <div className="space-y-4">
@@ -365,7 +417,9 @@ const Dashboard = () => {
                   {todayOrders.length}
                 </p>
               )}
-              <p className="text-sm text-muted-foreground">Total Orders</p>
+              <p className="text-sm text-muted-foreground">
+                {isPersonalView ? "Your Orders" : "Total Orders"}
+              </p>
             </div>
           </div>
         </Card>
@@ -399,32 +453,50 @@ const Dashboard = () => {
             </div>
           </div>
         </Card>
-        <Card
-          className={`bg-card border-border p-4 ${
-            lowStockItems.length > 0
-              ? "cursor-pointer hover:border-primary/30 transition-colors"
-              : ""
-          }`}
-          onClick={() => lowStockItems.length > 0 && setLowStockDialogOpen(true)}
-        >
-          <div className="flex items-center gap-3">
-            <AlertTriangle
-              className={`w-8 h-8 ${
-                lowStockItems.length > 0 ? "text-destructive" : "text-emerald-500"
-              }`}
-            />
-            <div>
-              {isLoading ? (
-                <Skeleton className="h-8 w-12" />
-              ) : (
-                <p className="text-2xl font-bold text-foreground">
-                  {lowStockItems.length}
-                </p>
-              )}
-              <p className="text-sm text-muted-foreground">Low Stock</p>
+        {showInventoryStats ? (
+          <Card
+            className={`bg-card border-border p-4 ${
+              lowStockItems.length > 0
+                ? "cursor-pointer hover:border-primary/30 transition-colors"
+                : ""
+            }`}
+            onClick={() => lowStockItems.length > 0 && setLowStockDialogOpen(true)}
+          >
+            <div className="flex items-center gap-3">
+              <AlertTriangle
+                className={`w-8 h-8 ${
+                  lowStockItems.length > 0 ? "text-destructive" : "text-emerald-500"
+                }`}
+              />
+              <div>
+                {isLoading ? (
+                  <Skeleton className="h-8 w-12" />
+                ) : (
+                  <p className="text-2xl font-bold text-foreground">
+                    {lowStockItems.length}
+                  </p>
+                )}
+                <p className="text-sm text-muted-foreground">Low Stock</p>
+              </div>
             </div>
-          </div>
-        </Card>
+          </Card>
+        ) : (
+          <Card className="bg-card border-border p-4">
+            <div className="flex items-center gap-3">
+              <TrendingUp className="w-8 h-8 text-primary" />
+              <div>
+                {isLoading ? (
+                  <Skeleton className="h-8 w-16" />
+                ) : (
+                  <p className="text-2xl font-bold text-foreground">
+                    ₦{dailySales.toLocaleString()}
+                  </p>
+                )}
+                <p className="text-sm text-muted-foreground">Your Revenue</p>
+              </div>
+            </div>
+          </Card>
+        )}
       </div>
     </div>
   );

@@ -67,6 +67,7 @@ export interface OrderFilters {
   startDate?: string;
   endDate?: string;
   search?: string;
+  createdBy?: string; // For role-based filtering - cashiers only see their own orders
 }
 
 const ensureArray = <T,>(value: unknown): T[] => {
@@ -85,6 +86,7 @@ export const ordersApi = {
     if (filters?.orderType) query = query.eq('order_type', filters.orderType);
     if (filters?.startDate) query = query.gte('created_at', filters.startDate);
     if (filters?.endDate) query = query.lte('created_at', filters.endDate);
+    if (filters?.createdBy) query = query.eq('created_by', filters.createdBy);
 
     const { data, error } = await query;
     if (error) throw new Error(error.message);
@@ -307,7 +309,7 @@ export const ordersApi = {
   },
 
   // Reports
-  getDailySummary: async (date?: string): Promise<{
+  getDailySummary: async (date?: string, createdBy?: string): Promise<{
     totalOrders: number;
     totalRevenue: number;
     ordersByType: Record<string, number>;
@@ -317,12 +319,19 @@ export const ordersApi = {
     const startOfDay = `${targetDate}T00:00:00.000Z`;
     const endOfDay = `${targetDate}T23:59:59.999Z`;
 
-    const { data: orders, error } = await supabase
+    let query = supabase
       .from('orders')
       .select('*, payments(*)')
       .eq('status', 'completed')
       .gte('created_at', startOfDay)
       .lte('created_at', endOfDay);
+
+    // Apply role-based filter for cashiers
+    if (createdBy) {
+      query = query.eq('created_by', createdBy);
+    }
+
+    const { data: orders, error } = await query;
 
     if (error) throw new Error(error.message);
 
