@@ -54,7 +54,8 @@ serve(async (req) => {
     }
 
     const token = authHeader.replace("Bearer ", "");
-    console.log("Token length:", token.length);
+    const tokenParts = token.split(".").length;
+    console.log("Token length:", token.length, "token parts:", tokenParts);
     
     // Use the admin client to verify the JWT
     const { data: userData, error: authError } = await supabaseAdmin.auth.getUser(token);
@@ -62,10 +63,17 @@ serve(async (req) => {
     
     if (authError || !userData?.user) {
       console.error("Auth error:", authError);
-      return new Response(JSON.stringify({ error: "Invalid token", details: authError?.message }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify({
+          error: "Invalid token",
+          details: authError?.message,
+          token_info: { length: token.length, parts: tokenParts },
+        }),
+        {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
     }
     
     const requestingUser = userData.user;
