@@ -41,26 +41,26 @@ interface NavItem {
 
 const mainNavItems: NavItem[] = [
   { title: 'Dashboard', url: '/dashboard', icon: LayoutDashboard },
-  { title: 'POS', url: '/pos', icon: ShoppingCart, roles: ['super_admin', 'manager', 'cashier'] },
+  { title: 'POS', url: '/pos', icon: ShoppingCart, roles: ['super_admin', 'admin', 'manager', 'cashier'] },
   { title: 'Orders', url: '/orders', icon: ClipboardList },
-  { title: 'Order History', url: '/order-history', icon: History, roles: ['super_admin', 'manager', 'cashier'] },
-  { title: 'EOD Report', url: '/eod-report', icon: FileText, roles: ['super_admin', 'manager', 'cashier'] },
+  { title: 'Order History', url: '/order-history', icon: History, roles: ['super_admin', 'admin', 'manager', 'cashier'] },
+  { title: 'EOD Report', url: '/eod-report', icon: FileText, roles: ['super_admin', 'admin', 'manager', 'cashier'] },
 ];
 
 const operationsNavItems: NavItem[] = [
-  { title: 'Menu', url: '/menu', icon: UtensilsCrossed, roles: ['super_admin', 'manager'] },
-  { title: 'Bar', url: '/bar', icon: Wine, roles: ['super_admin', 'manager', 'bar_staff'] },
-  { title: 'Kitchen', url: '/kitchen', icon: ChefHat, roles: ['super_admin', 'manager', 'kitchen_staff'] },
+  { title: 'Menu', url: '/menu', icon: UtensilsCrossed, roles: ['super_admin', 'admin', 'manager'] },
+  { title: 'Bar', url: '/bar', icon: Wine, roles: ['super_admin', 'admin', 'manager', 'bar_staff'] },
+  { title: 'Kitchen', url: '/kitchen', icon: ChefHat, roles: ['super_admin', 'admin', 'manager', 'kitchen_staff'] },
 ];
 
 const managementNavItems: NavItem[] = [
-  { title: 'Inventory', url: '/inventory', icon: Package, roles: ['super_admin', 'manager', 'inventory_officer'] },
-  { title: 'Staff', url: '/staff', icon: Users, roles: ['super_admin', 'manager'] },
-  { title: 'Customers', url: '/customers', icon: Heart, roles: ['super_admin', 'manager', 'cashier'] },
-  { title: 'Reports', url: '/reports', icon: BarChart3, roles: ['super_admin', 'manager', 'accountant'] },
-  { title: 'Settings', url: '/settings', icon: Settings, roles: ['super_admin'] },
-  { title: 'Data Import', url: '/data-import', icon: Download, roles: ['super_admin'] },
-  { title: 'Data Sync', url: '/data-sync', icon: DatabaseBackup, roles: ['super_admin'] },
+  { title: 'Inventory', url: '/inventory', icon: Package, roles: ['super_admin', 'admin', 'manager', 'inventory_officer'] },
+  { title: 'Staff', url: '/staff', icon: Users, roles: ['super_admin', 'admin', 'manager'] },
+  { title: 'Customers', url: '/customers', icon: Heart, roles: ['super_admin', 'admin', 'manager', 'cashier'] },
+  { title: 'Reports', url: '/reports', icon: BarChart3, roles: ['super_admin', 'admin', 'manager', 'accountant'] },
+  { title: 'Settings', url: '/settings', icon: Settings, roles: ['super_admin', 'admin'] },
+  { title: 'Data Import', url: '/data-import', icon: Download, roles: ['super_admin', 'admin'] },
+  { title: 'Data Sync', url: '/data-sync', icon: DatabaseBackup, roles: ['super_admin', 'admin'] },
 ];
 
 export const AppSidebar = () => {
