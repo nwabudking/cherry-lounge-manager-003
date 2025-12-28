@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useAuth } from "@/contexts/AuthContext";
+import { useUserRole } from "@/hooks/useUserRole";
 import { format, startOfDay, endOfDay } from "date-fns";
 import { CalendarIcon, Receipt, Users, CreditCard, Banknote, Smartphone, Building } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -72,11 +72,12 @@ interface CashierProfile {
 }
 
 const EODReport = () => {
-  const { user, role } = useAuth();
+  const { user, permissions } = useUserRole();
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [selectedCashier, setSelectedCashier] = useState<string>("all");
   
-  const isManager = role === "super_admin" || role === "manager";
+  // Privileged users (super_admin, manager) can see all staff data
+  const isPrivileged = permissions.isPrivileged;
 
   // Fetch all cashiers (for managers)
   const { data: rawCashiers } = useQuery({
@@ -85,7 +86,7 @@ const EODReport = () => {
       const data = await staffApi.getProfiles();
       return data as CashierProfile[];
     },
-    enabled: isManager,
+    enabled: isPrivileged,
   });
   const cashiers = Array.isArray(rawCashiers) ? rawCashiers : [];
 
@@ -96,10 +97,11 @@ const EODReport = () => {
       const start = startOfDay(selectedDate).toISOString();
       const end = endOfDay(selectedDate).toISOString();
 
+      // Non-privileged users only see their own sales
       const cashierId =
         selectedCashier !== "all"
           ? selectedCashier
-          : !isManager
+          : !isPrivileged
           ? user?.id
           : undefined;
 
@@ -173,8 +175,8 @@ const EODReport = () => {
             </PopoverContent>
           </Popover>
 
-          {/* Cashier Filter (managers only) */}
-          {isManager && (
+          {/* Cashier Filter (privileged users only) */}
+          {isPrivileged && (
             <Select value={selectedCashier} onValueChange={setSelectedCashier}>
               <SelectTrigger className="w-[200px]">
                 <Users className="mr-2 h-4 w-4" />
@@ -330,7 +332,7 @@ const EODReport = () => {
                     <TableHead>Type</TableHead>
                     <TableHead>Items</TableHead>
                     <TableHead>Payment</TableHead>
-                    {isManager && <TableHead>Cashier</TableHead>}
+                    {isPrivileged && <TableHead>Cashier</TableHead>}
                     <TableHead className="text-right">Amount</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -366,7 +368,7 @@ const EODReport = () => {
                       <TableCell>
                         {(order.payments || []).map((p) => paymentLabels[p.payment_method] || p.payment_method).join(", ")}
                       </TableCell>
-                      {isManager && (
+                      {isPrivileged && (
                         <TableCell>{getCashierName(order.created_by)}</TableCell>
                       )}
                       <TableCell className="text-right font-medium">
