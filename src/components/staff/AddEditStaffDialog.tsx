@@ -28,6 +28,7 @@ interface AddEditStaffDialogProps {
     password?: string;
     fullName: string;
     role: AppRole;
+    newEmail?: string;
   }) => void;
   isSaving: boolean;
   isEditing: boolean;
@@ -80,7 +81,10 @@ export const AddEditStaffDialog = ({
     password: "",
     fullName: "",
     role: defaultRole,
+    newEmail: "",
   });
+
+  const canUpdateEmail = currentUserRole === "super_admin" && isEditing;
 
   useEffect(() => {
     if (staff && isEditing) {
@@ -89,6 +93,7 @@ export const AddEditStaffDialog = ({
         password: "",
         fullName: staff.full_name || "",
         role: staff.role || "cashier",
+        newEmail: staff.email || "",
       });
     } else {
       setFormData({
@@ -96,6 +101,7 @@ export const AddEditStaffDialog = ({
         password: "",
         fullName: "",
         role: defaultRole,
+        newEmail: "",
       });
     }
   }, [staff, isEditing, open, defaultRole]);
@@ -103,9 +109,11 @@ export const AddEditStaffDialog = ({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (isEditing) {
+      const emailChanged = canUpdateEmail && formData.newEmail !== staff?.email;
       onSave({
         fullName: formData.fullName,
         role: formData.role,
+        newEmail: emailChanged ? formData.newEmail : undefined,
       });
     } else {
       onSave({
@@ -162,6 +170,22 @@ export const AddEditStaffDialog = ({
                 />
               </div>
             </>
+          )}
+
+          {canUpdateEmail && (
+            <div className="space-y-2">
+              <Label htmlFor="editEmail">Email</Label>
+              <Input
+                id="editEmail"
+                type="email"
+                value={formData.newEmail}
+                onChange={(e) => setFormData({ ...formData, newEmail: e.target.value })}
+                placeholder="staff@example.com"
+              />
+              <p className="text-xs text-muted-foreground">
+                Changing email will update login credentials
+              </p>
+            </div>
           )}
 
           <div className="space-y-2">
