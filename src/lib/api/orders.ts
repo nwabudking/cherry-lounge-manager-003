@@ -45,6 +45,7 @@ export interface CreateOrderData {
   order_type: string;
   table_number?: string;
   notes?: string;
+  customer_id?: string;
   items: Array<{
     menu_item_id: string;
     item_name: string;
@@ -145,6 +146,7 @@ export const ordersApi = {
         order_number: orderNumber,
         order_type: orderData.order_type,
         table_number: orderData.table_number || null,
+        customer_id: orderData.customer_id || null,
         status: 'pending',
         subtotal,
         discount_amount: discountAmount,

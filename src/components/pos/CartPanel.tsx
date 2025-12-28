@@ -4,6 +4,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Minus, Plus, Trash2, ShoppingCart } from "lucide-react";
 import { CartItem } from "@/pages/POS";
+import { CustomerSelect } from "./CustomerSelect";
+import type { Customer } from "@/lib/api/customers";
 
 interface CartPanelProps {
   cart: CartItem[];
@@ -13,6 +15,8 @@ interface CartPanelProps {
   onRemoveItem: (id: string) => void;
   onClearCart: () => void;
   onCheckout: () => void;
+  selectedCustomer: Customer | null;
+  onSelectCustomer: (customer: Customer | null) => void;
 }
 
 const formatPrice = (price: number) => {
@@ -31,10 +35,12 @@ export const CartPanel = ({
   onRemoveItem,
   onClearCart,
   onCheckout,
+  selectedCustomer,
+  onSelectCustomer,
 }: CartPanelProps) => {
   return (
     <Card className="w-80 lg:w-96 rounded-none border-l border-y-0 border-r-0 flex flex-col">
-      <CardHeader className="pb-3 border-b border-border">
+      <CardHeader className="pb-3 border-b border-border space-y-3">
         <div className="flex items-center justify-between">
           <CardTitle className="text-lg flex items-center gap-2">
             <ShoppingCart className="h-5 w-5" />
@@ -51,6 +57,10 @@ export const CartPanel = ({
             </Button>
           )}
         </div>
+        <CustomerSelect
+          selectedCustomer={selectedCustomer}
+          onSelectCustomer={onSelectCustomer}
+        />
       </CardHeader>
 
       <ScrollArea className="flex-1">
