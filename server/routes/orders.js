@@ -351,7 +351,7 @@ router.get('/range', authMiddleware, async (req, res) => {
   }
 });
 
-// Create order
+// Create order with improved inventory handling
 router.post('/', authMiddleware, async (req, res) => {
   const conn = await getConnection();
   try {
@@ -359,33 +359,72 @@ router.post('/', authMiddleware, async (req, res) => {
 
     const { order_type, table_number, notes, items, discount_amount, service_charge, payment } = req.body;
 
-    // Calculate totals
-    const subtotal = items.reduce((sum, item) => sum + item.unit_price * item.quantity, 0);
-    const discountAmt = discount_amount || 0;
-    const serviceAmt = service_charge || 0;
+    // Validate items array
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      throw new Error('Order must contain at least one item');
+    }
+
+    // Calculate totals with proper decimal handling
+    const subtotal = items.reduce((sum, item) => {
+      const price = parseFloat(item.unit_price) || 0;
+      const qty = parseFloat(item.quantity) || 0;
+      return sum + (price * qty);
+    }, 0);
+    
+    const discountAmt = parseFloat(discount_amount) || 0;
+    const serviceAmt = parseFloat(service_charge) || 0;
     const vatAmount = 0;
-    const totalAmount = subtotal - discountAmt + serviceAmt + vatAmount;
+    const totalAmount = Math.max(0, subtotal - discountAmt + serviceAmt + vatAmount);
 
     // Generate order number
     const orderNumber = await generateOrderNumber();
     const orderId = uuidv4();
 
-    // Validate stock for tracked items
+    // Pre-validate stock for ALL tracked items before making any changes
+    const stockChecks = [];
     for (const item of items) {
-      // Get menu item to check if it tracks inventory
+      if (!item.menu_item_id) continue;
+      
       const [menuItems] = await conn.execute(
-        'SELECT inventory_item_id, track_inventory FROM menu_items WHERE id = ?',
+        'SELECT inventory_item_id, track_inventory, name FROM menu_items WHERE id = ?',
         [item.menu_item_id]
       );
       
       if (menuItems[0]?.track_inventory && menuItems[0]?.inventory_item_id) {
         const [inv] = await conn.execute(
-          'SELECT current_stock FROM inventory_items WHERE id = ?',
+          'SELECT id, current_stock, name FROM inventory_items WHERE id = ?',
           [menuItems[0].inventory_item_id]
         );
-        if (inv[0] && inv[0].current_stock < item.quantity) {
-          throw new Error(`Insufficient stock for "${item.item_name}". Available: ${inv[0].current_stock}`);
+        
+        if (inv[0]) {
+          const currentStock = parseFloat(inv[0].current_stock) || 0;
+          const requiredQty = parseFloat(item.quantity) || 0;
+          
+          // Find existing check for same inventory item (for aggregating quantities)
+          const existingCheck = stockChecks.find(c => c.inventoryId === inv[0].id);
+          
+          if (existingCheck) {
+            existingCheck.requiredQty += requiredQty;
+          } else {
+            stockChecks.push({
+              inventoryId: inv[0].id,
+              inventoryName: inv[0].name,
+              currentStock,
+              requiredQty,
+              itemName: item.item_name || menuItems[0].name,
+            });
+          }
         }
+      }
+    }
+    
+    // Check all stock requirements
+    for (const check of stockChecks) {
+      if (check.currentStock < check.requiredQty) {
+        throw new Error(
+          `Insufficient stock for "${check.itemName}". ` +
+          `Required: ${check.requiredQty.toFixed(2)}, Available: ${check.currentStock.toFixed(2)}`
+        );
       }
     }
 
@@ -398,13 +437,19 @@ router.post('/', authMiddleware, async (req, res) => {
 
     // Create order items and deduct stock
     for (const item of items) {
+      const itemQty = parseFloat(item.quantity) || 0;
+      const itemPrice = parseFloat(item.unit_price) || 0;
+      const itemTotal = itemQty * itemPrice;
+      
       await conn.execute(
         `INSERT INTO order_items (id, order_id, menu_item_id, item_name, quantity, unit_price, total_price, notes, created_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
-        [uuidv4(), orderId, item.menu_item_id || null, item.item_name, item.quantity, item.unit_price, item.unit_price * item.quantity, item.notes || null]
+        [uuidv4(), orderId, item.menu_item_id || null, item.item_name, itemQty, itemPrice, itemTotal, item.notes || null]
       );
 
       // Deduct stock for tracked items
+      if (!item.menu_item_id) continue;
+      
       const [menuItems] = await conn.execute(
         'SELECT inventory_item_id, track_inventory FROM menu_items WHERE id = ?',
         [item.menu_item_id]
@@ -415,33 +460,37 @@ router.post('/', authMiddleware, async (req, res) => {
           'SELECT current_stock FROM inventory_items WHERE id = ?',
           [menuItems[0].inventory_item_id]
         );
-        const previousStock = inv[0].current_stock;
-        const newStock = Math.max(0, previousStock - item.quantity);
+        
+        if (inv[0]) {
+          const previousStock = parseFloat(inv[0].current_stock) || 0;
+          const newStock = Math.max(0, previousStock - itemQty);
 
-        await conn.execute(
-          'UPDATE inventory_items SET current_stock = ?, updated_at = NOW() WHERE id = ?',
-          [newStock, menuItems[0].inventory_item_id]
-        );
+          await conn.execute(
+            'UPDATE inventory_items SET current_stock = ?, updated_at = NOW() WHERE id = ?',
+            [newStock, menuItems[0].inventory_item_id]
+          );
 
-        // Log stock movement
-        await conn.execute(
-          `INSERT INTO stock_movements (id, inventory_item_id, movement_type, quantity, previous_stock, new_stock, notes, reference, created_by, created_at)
-           VALUES (?, ?, 'out', ?, ?, ?, ?, ?, ?, NOW())`,
-          [uuidv4(), menuItems[0].inventory_item_id, item.quantity, previousStock, newStock, `Sold via POS - ${item.item_name}`, orderNumber, req.user.id]
-        );
+          // Log stock movement with decimal support
+          await conn.execute(
+            `INSERT INTO stock_movements (id, inventory_item_id, movement_type, quantity, previous_stock, new_stock, notes, reference, created_by, created_at)
+             VALUES (?, ?, 'out', ?, ?, ?, ?, ?, ?, NOW())`,
+            [uuidv4(), menuItems[0].inventory_item_id, itemQty, previousStock, newStock, `Sold via POS - ${item.item_name}`, orderNumber, req.user.id]
+          );
+        }
       }
     }
 
     // Create payment
+    const paymentAmount = parseFloat(payment.amount) || totalAmount;
     await conn.execute(
       `INSERT INTO payments (id, order_id, payment_method, amount, reference, status, created_by, created_at)
        VALUES (?, ?, ?, ?, ?, 'completed', ?, NOW())`,
-      [uuidv4(), orderId, payment.payment_method, payment.amount, payment.reference || null, req.user.id]
+      [uuidv4(), orderId, payment.payment_method, paymentAmount, payment.reference || null, req.user.id]
     );
 
     await conn.commit();
 
-    // Fetch created order
+    // Fetch created order with items
     const [order] = await query('SELECT * FROM orders WHERE id = ?', [orderId]);
 
     res.json(order);

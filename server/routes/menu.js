@@ -107,12 +107,22 @@ router.patch('/categories/:id', authMiddleware, roleMiddleware('super_admin', 'm
   }
 });
 
-// Delete category
+// Delete category - hard delete by default
 router.delete('/categories/:id', authMiddleware, roleMiddleware('super_admin', 'manager'), async (req, res) => {
   try {
     const { id } = req.params;
-    await query('UPDATE menu_categories SET is_active = 0 WHERE id = ?', [id]);
-    res.json({ success: true });
+    const { soft } = req.query;
+    
+    if (soft === 'true') {
+      await query('UPDATE menu_categories SET is_active = 0 WHERE id = ?', [id]);
+    } else {
+      // First unlink any menu items
+      await query('UPDATE menu_items SET category_id = NULL WHERE category_id = ?', [id]);
+      // Then delete the category
+      await query('DELETE FROM menu_categories WHERE id = ?', [id]);
+    }
+    
+    res.json({ success: true, deleted: true });
   } catch (error) {
     console.error('Delete category error:', error);
     res.status(500).json({ error: 'Failed to delete category' });
@@ -260,12 +270,20 @@ router.patch('/items/:id', authMiddleware, roleMiddleware('super_admin', 'manage
   }
 });
 
-// Delete menu item
+// Delete menu item - hard delete by default
 router.delete('/items/:id', authMiddleware, roleMiddleware('super_admin', 'manager'), async (req, res) => {
   try {
     const { id } = req.params;
-    await query('UPDATE menu_items SET is_active = 0 WHERE id = ?', [id]);
-    res.json({ success: true });
+    const { soft } = req.query;
+    
+    if (soft === 'true') {
+      await query('UPDATE menu_items SET is_active = 0, updated_at = NOW() WHERE id = ?', [id]);
+    } else {
+      // Hard delete - completely remove
+      await query('DELETE FROM menu_items WHERE id = ?', [id]);
+    }
+    
+    res.json({ success: true, deleted: true });
   } catch (error) {
     console.error('Delete menu item error:', error);
     res.status(500).json({ error: 'Failed to delete menu item' });
