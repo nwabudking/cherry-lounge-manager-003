@@ -101,7 +101,7 @@ const Inventory = () => {
     return matchesSearch && matchesCategory && matchesLowStock;
   });
 
-  const canManage = role === "super_admin" || role === "manager" || role === "inventory_officer";
+  const canManage = role === "super_admin" || role === "admin" || role === "manager" || role === "inventory_officer";
 
   const handleAddItem = () => {
     setSelectedItem(null);

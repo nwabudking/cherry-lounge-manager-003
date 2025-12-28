@@ -84,7 +84,7 @@ export const AddEditStaffDialog = ({
     newEmail: "",
   });
 
-  const canUpdateEmail = currentUserRole === "super_admin" && isEditing;
+  const canUpdateEmail = (currentUserRole === "super_admin" || currentUserRole === "admin") && isEditing;
 
   // Check if the staff's current role is in assignable roles (for display purposes)
   const staffRoleInAssignable = staff?.role && assignableRoles.some(r => r.value === staff.role);

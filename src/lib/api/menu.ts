@@ -151,7 +151,11 @@ export const menuApi = {
   getActiveMenuItems: async (categoryId?: string): Promise<MenuItem[]> => {
     let query = supabase
       .from('menu_items')
-      .select('*')
+      .select(`
+        *,
+        menu_categories(name),
+        inventory_items(id, current_stock, min_stock_level)
+      `)
       .eq('is_active', true)
       .eq('is_available', true)
       .order('created_at', { ascending: false });
