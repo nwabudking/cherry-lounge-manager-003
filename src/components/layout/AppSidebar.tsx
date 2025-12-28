@@ -60,6 +60,7 @@ const managementNavItems: NavItem[] = [
   { title: 'Reports', url: '/reports', icon: BarChart3, roles: ['super_admin', 'manager', 'accountant'] },
   { title: 'Settings', url: '/settings', icon: Settings, roles: ['super_admin', 'manager'] },
   { title: 'Data Import', url: '/data-import', icon: Download, roles: ['super_admin'] },
+  { title: 'Data Sync', url: '/data-sync', icon: DatabaseBackup, roles: ['super_admin'] },
 ];
 
 export const AppSidebar = () => {

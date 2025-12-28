@@ -11,7 +11,7 @@ import Dashboard from "./pages/Dashboard";
 import Profile from "./pages/Profile";
 import DataImport from "./pages/DataImport";
 import EODReport from "./pages/EODReport";
-import { POS, Orders, OrderHistory, Menu, Bar, Kitchen, Inventory, Staff, Customers, Reports, SettingsPage } from "./pages/modules";
+import { POS, Orders, OrderHistory, Menu, Bar, Kitchen, Inventory, Staff, Customers, Reports, SettingsPage, DataSync } from "./pages/modules";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient({
@@ -55,6 +55,7 @@ const App = () => (
                 <Route path="/reports" element={<Reports />} />
                 <Route path="/settings" element={<SettingsPage />} />
                 <Route path="/data-import" element={<DataImport />} />
+                <Route path="/data-sync" element={<DataSync />} />
               </Route>
               
               <Route path="*" element={<NotFound />} />

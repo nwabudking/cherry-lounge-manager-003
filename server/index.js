@@ -18,6 +18,7 @@ import profilesRoutes from './routes/profiles.js';
 import migrationRoutes from './routes/migration.js';
 import bootstrapRoutes from './routes/bootstrap.js';
 import dataRoutes from './routes/data.js';
+import healthRoutes from './routes/health.js';
 
 import { getPool } from './db/pool.js';
 import { verifyToken } from './middleware/auth.js';
@@ -92,9 +93,10 @@ app.use('/api/profiles', profilesRoutes);
 app.use('/api/migration', migrationRoutes);
 app.use('/api/bootstrap', bootstrapRoutes);
 app.use('/api/data', dataRoutes);
+app.use('/api/health', healthRoutes);
 
-// Health check
-app.get('/api/health', (req, res) => {
+// Simple health check (backward compat)
+app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 

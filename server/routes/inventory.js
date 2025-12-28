@@ -112,12 +112,24 @@ router.patch('/items/:id', authMiddleware, roleMiddleware('super_admin', 'manage
   }
 });
 
-// Delete (soft) inventory item
+// Delete inventory item - hard delete by default, soft delete with ?soft=true
 router.delete('/items/:id', authMiddleware, roleMiddleware('super_admin', 'manager', 'inventory_officer'), async (req, res) => {
   try {
     const { id } = req.params;
-    await query('UPDATE inventory_items SET is_active = 0 WHERE id = ?', [id]);
-    res.json({ success: true });
+    const { soft } = req.query;
+    
+    if (soft === 'true') {
+      // Soft delete - just mark as inactive
+      await query('UPDATE inventory_items SET is_active = 0, updated_at = NOW() WHERE id = ?', [id]);
+    } else {
+      // Hard delete - remove completely
+      // First delete related stock movements
+      await query('DELETE FROM stock_movements WHERE inventory_item_id = ?', [id]);
+      // Then delete the item
+      await query('DELETE FROM inventory_items WHERE id = ?', [id]);
+    }
+    
+    res.json({ success: true, deleted: true });
   } catch (error) {
     console.error('Delete inventory item error:', error);
     res.status(500).json({ error: 'Failed to delete inventory item' });
