@@ -14,6 +14,54 @@ export type Database = {
   }
   public: {
     Tables: {
+      customers: {
+        Row: {
+          address: string | null
+          created_at: string
+          email: string | null
+          id: string
+          is_active: boolean
+          loyalty_points: number
+          name: string
+          notes: string | null
+          phone: string | null
+          tags: string[] | null
+          total_orders: number
+          total_spent: number
+          updated_at: string
+        }
+        Insert: {
+          address?: string | null
+          created_at?: string
+          email?: string | null
+          id?: string
+          is_active?: boolean
+          loyalty_points?: number
+          name: string
+          notes?: string | null
+          phone?: string | null
+          tags?: string[] | null
+          total_orders?: number
+          total_spent?: number
+          updated_at?: string
+        }
+        Update: {
+          address?: string | null
+          created_at?: string
+          email?: string | null
+          id?: string
+          is_active?: boolean
+          loyalty_points?: number
+          name?: string
+          notes?: string | null
+          phone?: string | null
+          tags?: string[] | null
+          total_orders?: number
+          total_spent?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       inventory_items: {
         Row: {
           category: string | null
@@ -222,6 +270,7 @@ export type Database = {
         Row: {
           created_at: string | null
           created_by: string | null
+          customer_id: string | null
           discount_amount: number
           id: string
           notes: string | null
@@ -238,6 +287,7 @@ export type Database = {
         Insert: {
           created_at?: string | null
           created_by?: string | null
+          customer_id?: string | null
           discount_amount?: number
           id?: string
           notes?: string | null
@@ -254,6 +304,7 @@ export type Database = {
         Update: {
           created_at?: string | null
           created_by?: string | null
+          customer_id?: string | null
           discount_amount?: number
           id?: string
           notes?: string | null
@@ -267,7 +318,15 @@ export type Database = {
           updated_at?: string | null
           vat_amount?: number
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "orders_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       payments: {
         Row: {
