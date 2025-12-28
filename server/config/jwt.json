@@ -1,4 +1,0 @@
-{
-  "secret": "change-this-to-a-secure-random-string-in-production",
-  "expiresIn": "24h"
-}

@@ -1,6 +1,4 @@
-import apiClient from './client';
 import { supabase } from '@/integrations/supabase/client';
-import { useSupabaseForReads } from '@/lib/db/environment';
 
 export interface MenuCategory {
   id: string;
@@ -25,7 +23,6 @@ export interface MenuItem {
   inventory_item_id: string | null;
   created_at: string;
   updated_at: string;
-  // Joined data
   category_name?: string;
   inventory_items?: {
     id: string;
@@ -36,149 +33,163 @@ export interface MenuItem {
 
 const ensureArray = <T,>(value: unknown): T[] => {
   if (Array.isArray(value)) return value as T[];
-  if (value && typeof value === 'object') {
-    const v = value as any;
-    const candidate = v.data ?? v.categories ?? v.items ?? v.results ?? v.rows;
-    if (Array.isArray(candidate)) return candidate as T[];
-  }
   return [];
 };
 
 export const menuApi = {
   // Categories
   getCategories: async (): Promise<MenuCategory[]> => {
-    // Lovable Cloud / Supabase reads
-    if (useSupabaseForReads()) {
-      const { data, error } = await supabase
-        .from('menu_categories')
-        .select('*')
-        .order('sort_order', { ascending: true })
-        .order('created_at', { ascending: true });
+    const { data, error } = await supabase
+      .from('menu_categories')
+      .select('*')
+      .order('sort_order', { ascending: true })
+      .order('created_at', { ascending: true });
 
-      if (!error) return ensureArray<MenuCategory>(data);
-      // Fall through to REST if available
-    }
-
-    // Docker/MySQL REST reads
-    const response = await apiClient.get<MenuCategory[]>('/menu/categories');
-    return ensureArray<MenuCategory>(response.data);
+    if (error) throw new Error(error.message);
+    return ensureArray<MenuCategory>(data);
   },
 
   getActiveCategories: async (): Promise<MenuCategory[]> => {
-    // Lovable Cloud / Supabase reads
-    if (useSupabaseForReads()) {
-      const { data, error } = await supabase
-        .from('menu_categories')
-        .select('*')
-        .eq('is_active', true)
-        .order('sort_order', { ascending: true })
-        .order('created_at', { ascending: true });
+    const { data, error } = await supabase
+      .from('menu_categories')
+      .select('*')
+      .eq('is_active', true)
+      .order('sort_order', { ascending: true })
+      .order('created_at', { ascending: true });
 
-      if (!error) return ensureArray<MenuCategory>(data);
-      // Fall through to REST if available
-    }
-
-    // Docker/MySQL REST reads
-    const response = await apiClient.get<MenuCategory[]>('/menu/categories', {
-      params: { active: true },
-    });
-    return ensureArray<MenuCategory>(response.data);
+    if (error) throw new Error(error.message);
+    return ensureArray<MenuCategory>(data);
   },
 
   createCategory: async (categoryData: Partial<MenuCategory>): Promise<MenuCategory> => {
-    const response = await apiClient.post<MenuCategory>('/menu/categories', categoryData);
-    return response.data;
+    const { data, error } = await supabase
+      .from('menu_categories')
+      .insert(categoryData)
+      .select()
+      .single();
+    
+    if (error) throw new Error(error.message);
+    return data as MenuCategory;
   },
 
   updateCategory: async (id: string, categoryData: Partial<MenuCategory>): Promise<MenuCategory> => {
-    const response = await apiClient.patch<MenuCategory>(`/menu/categories/${id}`, categoryData);
-    return response.data;
+    const { data, error } = await supabase
+      .from('menu_categories')
+      .update(categoryData)
+      .eq('id', id)
+      .select()
+      .single();
+    
+    if (error) throw new Error(error.message);
+    return data as MenuCategory;
   },
 
   deleteCategory: async (id: string): Promise<void> => {
-    await apiClient.delete(`/menu/categories/${id}`);
+    const { error } = await supabase
+      .from('menu_categories')
+      .delete()
+      .eq('id', id);
+    
+    if (error) throw new Error(error.message);
   },
 
   // Menu Items
   getMenuItems: async (categoryId?: string): Promise<MenuItem[]> => {
-    // Lovable Cloud / Supabase reads
-    if (useSupabaseForReads()) {
-      let query = supabase
-        .from('menu_items')
-        .select('*')
-        .order('created_at', { ascending: false });
+    let query = supabase
+      .from('menu_items')
+      .select('*')
+      .order('created_at', { ascending: false });
 
-      if (categoryId) query = query.eq('category_id', categoryId);
+    if (categoryId) query = query.eq('category_id', categoryId);
 
-      const { data, error } = await query;
-      if (!error) return ensureArray<MenuItem>(data);
-      // Fall through to REST if available
-    }
-
-    // Docker/MySQL REST reads
-    const response = await apiClient.get<MenuItem[]>('/menu/items', {
-      params: categoryId ? { categoryId } : undefined,
-    });
-    return ensureArray<MenuItem>(response.data);
+    const { data, error } = await query;
+    if (error) throw new Error(error.message);
+    return ensureArray<MenuItem>(data);
   },
 
   getActiveMenuItems: async (categoryId?: string): Promise<MenuItem[]> => {
-    // Lovable Cloud / Supabase reads
-    if (useSupabaseForReads()) {
-      let query = supabase
-        .from('menu_items')
-        .select('*')
-        .eq('is_active', true)
-        .eq('is_available', true)
-        .order('created_at', { ascending: false });
+    let query = supabase
+      .from('menu_items')
+      .select('*')
+      .eq('is_active', true)
+      .eq('is_available', true)
+      .order('created_at', { ascending: false });
 
-      if (categoryId) query = query.eq('category_id', categoryId);
+    if (categoryId) query = query.eq('category_id', categoryId);
 
-      const { data, error } = await query;
-      if (error) return [];
-      return ensureArray<MenuItem>(data);
-    }
-
-    // Docker/MySQL REST reads
-    const response = await apiClient.get<MenuItem[]>('/menu/items', {
-      params: { active: true, ...(categoryId && { categoryId }) },
-    });
-    return ensureArray<MenuItem>(response.data);
+    const { data, error } = await query;
+    if (error) return [];
+    return ensureArray<MenuItem>(data);
   },
 
   getMenuItem: async (id: string): Promise<MenuItem> => {
-    const response = await apiClient.get<MenuItem>(`/menu/items/${id}`);
-    return response.data;
+    const { data, error } = await supabase
+      .from('menu_items')
+      .select('*')
+      .eq('id', id)
+      .single();
+    
+    if (error) throw new Error(error.message);
+    return data as MenuItem;
   },
 
   createMenuItem: async (itemData: Partial<MenuItem>): Promise<MenuItem> => {
-    const response = await apiClient.post<MenuItem>('/menu/items', itemData);
-    return response.data;
+    const { data, error } = await supabase
+      .from('menu_items')
+      .insert(itemData)
+      .select()
+      .single();
+    
+    if (error) throw new Error(error.message);
+    return data as MenuItem;
   },
 
   updateMenuItem: async (id: string, itemData: Partial<MenuItem>): Promise<MenuItem> => {
-    const response = await apiClient.patch<MenuItem>(`/menu/items/${id}`, itemData);
-    return response.data;
+    const { data, error } = await supabase
+      .from('menu_items')
+      .update(itemData)
+      .eq('id', id)
+      .select()
+      .single();
+    
+    if (error) throw new Error(error.message);
+    return data as MenuItem;
   },
 
   deleteMenuItem: async (id: string): Promise<void> => {
-    await apiClient.delete(`/menu/items/${id}`);
+    const { error } = await supabase
+      .from('menu_items')
+      .delete()
+      .eq('id', id);
+    
+    if (error) throw new Error(error.message);
   },
 
   uploadImage: async (file: File): Promise<string> => {
-    const formData = new FormData();
-    formData.append('image', file);
-    const response = await apiClient.post<{ url: string }>('/menu/upload-image', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    });
-    return response.data.url;
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${crypto.randomUUID?.() || Date.now()}.${fileExt}`;
+    const filePath = `menu/${fileName}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from('menu-images')
+      .upload(filePath, file);
+
+    if (uploadError) throw new Error(uploadError.message);
+
+    const { data } = supabase.storage
+      .from('menu-images')
+      .getPublicUrl(filePath);
+
+    return data.publicUrl;
   },
 
   getMenuItemCount: async (): Promise<number> => {
-    const response = await apiClient.get<{ count: number }>('/menu/items/count');
-    return response.data.count;
+    const { count, error } = await supabase
+      .from('menu_items')
+      .select('*', { count: 'exact', head: true })
+      .eq('is_active', true);
+    
+    if (error) throw new Error(error.message);
+    return count || 0;
   },
 };
-
