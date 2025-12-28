@@ -6,27 +6,38 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { Eye, EyeOff, Loader2 } from 'lucide-react';
+import { Eye, EyeOff, Loader2, Shield, AlertCircle } from 'lucide-react';
 import { z } from 'zod';
 import logoImage from '@/assets/logo.png';
-
+import apiClient from '@/lib/api/client';
 
 const emailSchema = z.string().email('Please enter a valid email address');
 const passwordSchema = z.string().min(6, 'Password must be at least 6 characters');
 
+interface SystemStatus {
+  initialized: boolean;
+  hasSuperAdmin: boolean;
+  needsSetup: boolean;
+}
+
 const Auth = () => {
-  const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  
+  const [isCheckingStatus, setIsCheckingStatus] = useState(true);
+  const [systemStatus, setSystemStatus] = useState<SystemStatus | null>(null);
   const [errors, setErrors] = useState<{ email?: string; password?: string; fullName?: string }>({});
   
-  const { signIn, signUp, isAuthenticated } = useAuth();
+  const { signIn, isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
+
+  // Check system status on mount
+  useEffect(() => {
+    checkSystemStatus();
+  }, []);
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -34,7 +45,21 @@ const Auth = () => {
     }
   }, [isAuthenticated, navigate]);
 
-  const validate = () => {
+  const checkSystemStatus = async () => {
+    setIsCheckingStatus(true);
+    try {
+      const response = await apiClient.get('/bootstrap/status');
+      setSystemStatus(response.data);
+    } catch (error) {
+      console.error('Failed to check system status:', error);
+      // Default to assuming system needs setup if we can't check
+      setSystemStatus({ initialized: false, hasSuperAdmin: false, needsSetup: true });
+    } finally {
+      setIsCheckingStatus(false);
+    }
+  };
+
+  const validate = (isSetup: boolean = false) => {
     const newErrors: typeof errors = {};
     
     const emailResult = emailSchema.safeParse(email);
@@ -47,63 +72,96 @@ const Auth = () => {
       newErrors.password = passwordResult.error.errors[0].message;
     }
 
-    if (isSignUp && !fullName.trim()) {
-      newErrors.fullName = 'Full name is required';
+    if (isSetup && !fullName.trim()) {
+      newErrors.fullName = 'Full name is required for initial setup';
     }
     
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  // Initial super-admin setup
+  const handleSetup = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!validate()) return;
+    if (!validate(true)) return;
     
     setIsLoading(true);
     
     try {
-      if (isSignUp) {
-        const { error } = await signUp(email, password, fullName);
-        if (error) {
-          toast({
-            variant: 'destructive',
-            title: 'Sign Up Failed',
-            description: error.message,
-          });
-        } else {
-          toast({
-            title: 'Account created!',
-            description: 'You have successfully signed up and logged in.',
-          });
-          navigate('/dashboard');
-        }
+      const response = await apiClient.post('/bootstrap/setup-admin', {
+        email,
+        password,
+        full_name: fullName,
+      });
+
+      if (response.data.success) {
+        toast({
+          title: 'Setup Complete!',
+          description: 'Super admin account created. Please sign in.',
+        });
+        
+        // Refresh status and switch to login mode
+        await checkSystemStatus();
+        setPassword(''); // Clear password for security
+      }
+    } catch (error: any) {
+      const message = error.response?.data?.error || 'Setup failed';
+      toast({
+        variant: 'destructive',
+        title: 'Setup Failed',
+        description: message,
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Regular login
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!validate(false)) return;
+    
+    setIsLoading(true);
+    
+    try {
+      const { error } = await signIn(email, password);
+      if (error) {
+        toast({
+          variant: 'destructive',
+          title: 'Login Failed',
+          description: error.message === 'Invalid login credentials' 
+            ? 'Invalid email or password. Please try again.'
+            : error.message,
+        });
       } else {
-        const { error } = await signIn(email, password);
-        if (error) {
-          toast({
-            variant: 'destructive',
-            title: 'Login Failed',
-            description: error.message === 'Invalid login credentials' 
-              ? 'Invalid email or password. Please try again.'
-              : error.message,
-          });
-        } else {
-          toast({
-            title: 'Welcome back!',
-            description: 'You have successfully logged in.',
-          });
-          // Small delay to allow state to propagate before navigation
-          setTimeout(() => {
-            navigate('/dashboard', { replace: true });
-          }, 100);
-        }
+        toast({
+          title: 'Welcome back!',
+          description: 'You have successfully logged in.',
+        });
+        setTimeout(() => {
+          navigate('/dashboard', { replace: true });
+        }, 100);
       }
     } finally {
       setIsLoading(false);
     }
   };
 
+  // Show loading state while checking system status
+  if (isCheckingStatus) {
+    return (
+      <div className="min-h-screen flex items-center justify-center gradient-dark">
+        <div className="text-center space-y-4">
+          <Loader2 className="w-8 h-8 animate-spin mx-auto text-primary" />
+          <p className="text-muted-foreground">Checking system status...</p>
+        </div>
+      </div>
+    );
+  }
+
+  const needsSetup = systemStatus?.needsSetup ?? false;
 
   return (
     <div className="min-h-screen flex items-center justify-center gradient-dark p-4">
@@ -119,29 +177,52 @@ const Auth = () => {
             <img src={logoImage} alt="Cherry Dining & Lounge" className="h-20 w-auto object-contain" />
           </div>
           <div>
-            <CardDescription className="text-muted-foreground mt-2">
-              {isSignUp ? 'Create your account' : 'Staff Login'}
-            </CardDescription>
+            {needsSetup ? (
+              <>
+                <div className="flex items-center justify-center gap-2 mb-2">
+                  <Shield className="h-5 w-5 text-primary" />
+                  <span className="text-sm font-medium text-primary">Initial Setup</span>
+                </div>
+                <CardDescription className="text-muted-foreground">
+                  Create your super admin account to get started
+                </CardDescription>
+              </>
+            ) : (
+              <CardDescription className="text-muted-foreground">
+                Staff Login
+              </CardDescription>
+            )}
           </div>
         </CardHeader>
         
         <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {isSignUp && (
-              <div className="space-y-2">
-                <Label htmlFor="fullName" className="text-foreground">Full Name</Label>
-                <Input
-                  id="fullName"
-                  type="text"
-                  placeholder="Enter your full name"
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                  className="bg-input border-border text-foreground placeholder:text-muted-foreground focus:ring-primary"
-                />
-                {errors.fullName && (
-                  <p className="text-sm text-destructive">{errors.fullName}</p>
-                )}
-              </div>
+          <form onSubmit={needsSetup ? handleSetup : handleLogin} className="space-y-4">
+            {needsSetup && (
+              <>
+                <div className="bg-primary/10 border border-primary/20 rounded-lg p-3 mb-4">
+                  <div className="flex items-start gap-2">
+                    <AlertCircle className="h-4 w-4 text-primary mt-0.5 shrink-0" />
+                    <p className="text-xs text-muted-foreground">
+                      This is a one-time setup. The account you create will have full system access.
+                    </p>
+                  </div>
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="fullName" className="text-foreground">Full Name</Label>
+                  <Input
+                    id="fullName"
+                    type="text"
+                    placeholder="Enter your full name"
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    className="bg-input border-border text-foreground placeholder:text-muted-foreground focus:ring-primary"
+                  />
+                  {errors.fullName && (
+                    <p className="text-sm text-destructive">{errors.fullName}</p>
+                  )}
+                </div>
+              </>
             )}
 
             <div className="space-y-2">
@@ -165,7 +246,7 @@ const Auth = () => {
                 <Input
                   id="password"
                   type={showPassword ? 'text' : 'password'}
-                  placeholder="Enter your password"
+                  placeholder={needsSetup ? 'Create a strong password' : 'Enter your password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="bg-input border-border text-foreground placeholder:text-muted-foreground focus:ring-primary pr-10"
@@ -191,33 +272,22 @@ const Auth = () => {
               {isLoading ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  {isSignUp ? 'Creating account...' : 'Signing in...'}
+                  {needsSetup ? 'Creating Account...' : 'Signing in...'}
                 </>
               ) : (
-                isSignUp ? 'Create Account' : 'Sign In'
+                <>
+                  {needsSetup && <Shield className="w-4 h-4 mr-2" />}
+                  {needsSetup ? 'Create Super Admin Account' : 'Sign In'}
+                </>
               )}
             </Button>
           </form>
           
-          <div className="mt-6 text-center">
-            <button
-              type="button"
-              onClick={() => {
-                setIsSignUp(!isSignUp);
-                setErrors({});
-              }}
-              className="text-sm text-primary hover:underline"
-            >
-              {isSignUp ? 'Already have an account? Sign in' : 'Need an account? Sign up'}
-            </button>
-          </div>
-
-          {!isSignUp && (
-            <p className="mt-4 text-center text-sm text-muted-foreground">
+          {!needsSetup && (
+            <p className="mt-6 text-center text-sm text-muted-foreground">
               Contact your administrator if you need an account.
             </p>
           )}
-
         </CardContent>
       </Card>
     </div>

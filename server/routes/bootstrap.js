@@ -175,16 +175,25 @@ router.post('/data', async (req, res) => {
   }
 });
 
-// Check if system is initialized
+// Check if system is initialized (has super_admin)
 router.get('/status', async (req, res) => {
   try {
+    // Check specifically for super_admin user
+    const superAdmins = await query(
+      'SELECT COUNT(*) as count FROM user_roles WHERE role = ?',
+      ['super_admin']
+    );
     const users = await query('SELECT COUNT(*) as count FROM users');
     const categories = await query('SELECT COUNT(*) as count FROM menu_categories');
     const menuItems = await query('SELECT COUNT(*) as count FROM menu_items');
     const settings = await query('SELECT COUNT(*) as count FROM restaurant_settings');
 
+    const hasSuperAdmin = superAdmins[0].count > 0;
+
     res.json({
-      initialized: users[0].count > 0,
+      initialized: hasSuperAdmin,
+      hasSuperAdmin,
+      needsSetup: !hasSuperAdmin,
       users: users[0].count,
       categories: categories[0].count,
       menuItems: menuItems[0].count,
@@ -193,6 +202,86 @@ router.get('/status', async (req, res) => {
   } catch (error) {
     console.error('Status check error:', error);
     res.status(500).json({ error: 'Failed to check status' });
+  }
+});
+
+// Initial super-admin setup (only works if no super_admin exists)
+router.post('/setup-admin', async (req, res) => {
+  try {
+    const { email, password, full_name } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password are required' });
+    }
+
+    if (password.length < 6) {
+      return res.status(400).json({ error: 'Password must be at least 6 characters' });
+    }
+
+    // Check if super_admin already exists
+    const existingSuperAdmin = await query(
+      'SELECT COUNT(*) as count FROM user_roles WHERE role = ?',
+      ['super_admin']
+    );
+
+    if (existingSuperAdmin[0].count > 0) {
+      return res.status(403).json({ 
+        error: 'System already initialized. Super admin account already exists.',
+        code: 'ALREADY_INITIALIZED'
+      });
+    }
+
+    // Check if email is already used
+    const existingUser = await query('SELECT id FROM users WHERE email = ?', [email]);
+    if (existingUser.length > 0) {
+      return res.status(400).json({ error: 'Email already registered' });
+    }
+
+    // Create super_admin user
+    const userId = uuidv4();
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    await query('INSERT INTO users (id, email, password_hash) VALUES (?, ?, ?)', 
+      [userId, email, passwordHash]);
+
+    await query('INSERT INTO profiles (id, email, full_name) VALUES (?, ?, ?)', 
+      [userId, email, full_name || 'System Administrator']);
+
+    await query('INSERT INTO user_roles (id, user_id, role) VALUES (?, ?, ?)', 
+      [uuidv4(), userId, 'super_admin']);
+
+    // Create default restaurant settings if not exist
+    const existingSettings = await query('SELECT id FROM restaurant_settings LIMIT 1');
+    if (existingSettings.length === 0) {
+      await query(`
+        INSERT INTO restaurant_settings (id, name, tagline, address, city, country, phone, email, currency, timezone, receipt_footer)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `, [
+        uuidv4(),
+        'Cherry Dining & Lounge',
+        '& Lounge',
+        '123 Victoria Island',
+        'Lagos',
+        'Nigeria',
+        '+234 800 000 0000',
+        email,
+        'NGN',
+        'Africa/Lagos',
+        'Thank you for dining with us!'
+      ]);
+    }
+
+    // Log the setup action
+    console.log(`[AUDIT] Initial super-admin setup completed: ${email} at ${new Date().toISOString()}`);
+
+    res.status(201).json({
+      success: true,
+      message: 'Super admin account created successfully',
+      user: { id: userId, email, full_name: full_name || 'System Administrator', role: 'super_admin' }
+    });
+  } catch (error) {
+    console.error('Setup admin error:', error);
+    res.status(500).json({ error: 'Failed to create super admin account' });
   }
 });
 
