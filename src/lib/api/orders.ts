@@ -115,6 +115,69 @@ export const ordersApi = {
   },
 
   createOrder: async (orderData: CreateOrderData): Promise<Order> => {
+    // Get current user ID
+    const { data: { user } } = await supabase.auth.getUser();
+    const userId = user?.id || null;
+
+    // ==============================================
+    // STOCK VALIDATION BEFORE ORDER COMMIT
+    // ==============================================
+    const stockValidationErrors: string[] = [];
+    const itemsToDeduct: Array<{
+      menuItemId: string;
+      inventoryItemId: string;
+      itemName: string;
+      quantity: number;
+      currentStock: number;
+    }> = [];
+
+    // Check stock availability for all items that track inventory
+    for (const item of orderData.items) {
+      const { data: menuItem } = await supabase
+        .from('menu_items')
+        .select('name, inventory_item_id, track_inventory')
+        .eq('id', item.menu_item_id)
+        .maybeSingle();
+
+      if (menuItem?.track_inventory && menuItem?.inventory_item_id) {
+        const { data: invItem } = await supabase
+          .from('inventory_items')
+          .select('current_stock, name')
+          .eq('id', menuItem.inventory_item_id)
+          .single();
+
+        if (invItem) {
+          const currentStock = Number(invItem.current_stock);
+          const requestedQty = Number(item.quantity);
+
+          // Prevent negative stock
+          if (currentStock < requestedQty) {
+            stockValidationErrors.push(
+              `Insufficient stock for "${menuItem.name}": ${currentStock} available, ${requestedQty} requested`
+            );
+          } else {
+            // Queue for deduction after order is created
+            itemsToDeduct.push({
+              menuItemId: item.menu_item_id,
+              inventoryItemId: menuItem.inventory_item_id,
+              itemName: menuItem.name,
+              quantity: requestedQty,
+              currentStock,
+            });
+          }
+        }
+      }
+    }
+
+    // Abort if any stock validation errors
+    if (stockValidationErrors.length > 0) {
+      throw new Error(`Stock validation failed:\n${stockValidationErrors.join('\n')}`);
+    }
+
+    // ==============================================
+    // ORDER CREATION (Atomic Transaction)
+    // ==============================================
+    
     // Generate order number
     const today = new Date();
     const dateStr = `${today.getFullYear().toString().slice(-2)}${String(today.getMonth() + 1).padStart(2, '0')}${String(today.getDate()).padStart(2, '0')}`;
@@ -128,16 +191,16 @@ export const ordersApi = {
     
     const orderNumber = `ORD-${dateStr}-${String((count || 0) + 1).padStart(4, '0')}`;
     
-    // Calculate totals
-    const subtotal = orderData.items.reduce((sum, item) => sum + item.unit_price * item.quantity, 0);
-    const discountAmount = orderData.discount_amount || 0;
-    const serviceCharge = orderData.service_charge || 0;
+    // Calculate totals (supports decimal quantities)
+    const subtotal = orderData.items.reduce((sum, item) => {
+      const qty = Number(item.quantity);
+      const price = Number(item.unit_price);
+      return sum + (price * qty);
+    }, 0);
+    const discountAmount = Number(orderData.discount_amount || 0);
+    const serviceCharge = Number(orderData.service_charge || 0);
     const vatAmount = 0;
     const totalAmount = subtotal - discountAmount + serviceCharge + vatAmount;
-
-    // Get current user ID
-    const { data: { user } } = await supabase.auth.getUser();
-    const userId = user?.id || null;
 
     // 1. Create order with created_by set to current user
     const { data: order, error: orderError } = await supabase
@@ -161,14 +224,14 @@ export const ordersApi = {
 
     if (orderError) throw new Error(orderError.message);
 
-    // 2. Create order items
+    // 2. Create order items (supports decimal quantities)
     const orderItems = orderData.items.map(item => ({
       order_id: order.id,
       menu_item_id: item.menu_item_id,
       item_name: item.item_name,
-      quantity: item.quantity,
-      unit_price: item.unit_price,
-      total_price: item.unit_price * item.quantity,
+      quantity: Number(item.quantity),
+      unit_price: Number(item.unit_price),
+      total_price: Number(item.unit_price) * Number(item.quantity),
       notes: item.notes || null,
     }));
 
@@ -183,7 +246,7 @@ export const ordersApi = {
       .from('payments')
       .insert({
         order_id: order.id,
-        amount: orderData.payment.amount,
+        amount: Number(orderData.payment.amount),
         payment_method: orderData.payment.payment_method,
         reference: orderData.payment.reference || null,
         status: 'completed',
@@ -192,44 +255,31 @@ export const ordersApi = {
 
     if (paymentError) throw new Error(paymentError.message);
 
-    // 4. Deduct inventory for tracked items
-    for (const item of orderData.items) {
-      const { data: menuItem } = await supabase
-        .from('menu_items')
-        .select('inventory_item_id, track_inventory')
-        .eq('id', item.menu_item_id)
-        .maybeSingle();
+    // ==============================================
+    // INVENTORY DEDUCTION (After successful order creation)
+    // ==============================================
+    for (const item of itemsToDeduct) {
+      const newStock = Math.max(0, item.currentStock - item.quantity);
 
-      if (menuItem?.track_inventory && menuItem?.inventory_item_id) {
-        const { data: invItem } = await supabase
-          .from('inventory_items')
-          .select('current_stock')
-          .eq('id', menuItem.inventory_item_id)
-          .single();
+      // Update inventory
+      await supabase
+        .from('inventory_items')
+        .update({ current_stock: newStock })
+        .eq('id', item.inventoryItemId);
 
-        if (invItem) {
-          const previousStock = Number(invItem.current_stock);
-          const newStock = Math.max(0, previousStock - item.quantity);
-
-          await supabase
-            .from('inventory_items')
-            .update({ current_stock: newStock })
-            .eq('id', menuItem.inventory_item_id);
-
-          await supabase
-            .from('stock_movements')
-            .insert({
-              inventory_item_id: menuItem.inventory_item_id,
-              movement_type: 'out',
-              quantity: item.quantity,
-              previous_stock: previousStock,
-              new_stock: newStock,
-              reference: orderNumber,
-              notes: `Sale: Order ${orderNumber}`,
-              created_by: userId,
-            });
-        }
-      }
+      // Record stock movement
+      await supabase
+        .from('stock_movements')
+        .insert({
+          inventory_item_id: item.inventoryItemId,
+          movement_type: 'out',
+          quantity: item.quantity,
+          previous_stock: item.currentStock,
+          new_stock: newStock,
+          reference: orderNumber,
+          notes: `Sale: Order ${orderNumber}`,
+          created_by: userId,
+        });
     }
 
     // 5. Update order status to completed
