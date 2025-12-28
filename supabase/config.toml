@@ -8,3 +8,6 @@ verify_jwt = false
 
 [functions.reset-staff-password]
 verify_jwt = false
+
+[functions.manage-staff]
+verify_jwt = false
