@@ -37,16 +37,45 @@ const ensureArray = <T,>(value: unknown): T[] => {
 
 const getFunctionErrorMessage = (error: unknown) => {
   if (!error) return 'Unknown error';
-  if (error instanceof Error) {
-    const anyErr = error as unknown as { context?: { status?: number; body?: unknown } };
-    const status = anyErr?.context?.status;
-    const body = anyErr?.context?.body;
-    const bodyMsg = typeof body === 'string' ? body : body && typeof body === 'object' && 'error' in (body as any)
-      ? String((body as any).error)
-      : undefined;
-    return [status ? `(${status})` : undefined, bodyMsg || error.message].filter(Boolean).join(' ');
+
+  // Supabase Functions errors often include context: { status, body }
+  const anyErr = error as any;
+  const status: number | undefined = anyErr?.context?.status;
+  const bodyRaw: unknown = anyErr?.context?.body;
+
+  let bodyText: string | undefined;
+  let bodyJsonError: string | undefined;
+
+  if (typeof bodyRaw === 'string') {
+    bodyText = bodyRaw;
+    try {
+      const parsed = JSON.parse(bodyRaw);
+      if (parsed && typeof parsed === 'object' && 'error' in parsed) {
+        bodyJsonError = String((parsed as any).error);
+      }
+    } catch {
+      // ignore
+    }
+  } else if (bodyRaw && typeof bodyRaw === 'object' && 'error' in (bodyRaw as any)) {
+    bodyJsonError = String((bodyRaw as any).error);
   }
-  return String(error);
+
+  const baseMsg = error instanceof Error ? error.message : String(error);
+  const detail = bodyJsonError || bodyText;
+
+  return [status ? `(${status})` : undefined, detail || baseMsg]
+    .filter(Boolean)
+    .join(' ');
+};
+
+const invokeWithAuth = async <T,>(functionName: string, body: unknown) => {
+  const { data: sessionData } = await supabase.auth.getSession();
+  const accessToken = sessionData.session?.access_token;
+
+  return await supabase.functions.invoke<T>(functionName, {
+    body,
+    headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
+  });
 };
 
 async function getStaffFromCloud(): Promise<StaffMember[]> {
@@ -118,14 +147,12 @@ export const staffApi = {
   },
 
   createStaff: async (data: CreateStaffData): Promise<StaffMember> => {
-    const { data: result, error } = await supabase.functions.invoke('manage-staff', {
-      body: {
-        action: 'create',
-        email: data.email,
-        password: data.password,
-        fullName: data.full_name,
-        role: data.role,
-      },
+    const { data: result, error } = await invokeWithAuth<any>('manage-staff', {
+      action: 'create',
+      email: data.email,
+      password: data.password,
+      fullName: data.full_name,
+      role: data.role,
     });
     if (error) throw new Error(getFunctionErrorMessage(error));
     if (!result?.success || !result?.user?.id) throw new Error(result?.error || 'Failed to create staff');
@@ -143,13 +170,11 @@ export const staffApi = {
   },
 
   updateStaff: async (id: string, data: UpdateStaffData): Promise<StaffMember> => {
-    const { error } = await supabase.functions.invoke('manage-staff', {
-      body: {
-        action: 'update',
-        userId: id,
-        fullName: data.full_name,
-        role: data.role,
-      },
+    const { error } = await invokeWithAuth('manage-staff', {
+      action: 'update',
+      userId: id,
+      fullName: data.full_name,
+      role: data.role,
     });
     if (error) throw new Error(getFunctionErrorMessage(error));
 
@@ -158,21 +183,17 @@ export const staffApi = {
   },
 
   updateEmail: async (id: string, newEmail: string): Promise<void> => {
-    const { data, error } = await supabase.functions.invoke('manage-staff', {
-      body: {
-        action: 'update-email',
-        userId: id,
-        newEmail,
-      },
+    const { data, error } = await invokeWithAuth<any>('manage-staff', {
+      action: 'update-email',
+      userId: id,
+      newEmail,
     });
     if (error) throw new Error(getFunctionErrorMessage(error));
     if (data?.error) throw new Error(String(data.error));
   },
 
   deleteStaff: async (id: string): Promise<void> => {
-    const { error } = await supabase.functions.invoke('manage-staff', {
-      body: { action: 'delete', userId: id },
-    });
+    const { error } = await invokeWithAuth('manage-staff', { action: 'delete', userId: id });
     if (error) throw new Error(getFunctionErrorMessage(error));
   },
 
