@@ -10,6 +10,7 @@ import { CategoryTabs } from "@/components/pos/CategoryTabs";
 import { MenuGrid } from "@/components/pos/MenuGrid";
 import { CartPanel } from "@/components/pos/CartPanel";
 import { CheckoutDialog } from "@/components/pos/CheckoutDialog";
+import { generateUUID } from "@/lib/utils/uuid";
 
 export interface CartItem {
   id: string;
@@ -102,7 +103,7 @@ const POS = () => {
       return [
         ...prev,
         {
-          id: crypto.randomUUID(),
+          id: generateUUID(),
           menuItemId: item.id,
           name: item.name,
           price: item.price,
