@@ -62,10 +62,10 @@ export function useBarQueue() {
   });
 }
 
-export function useDailySummary(date?: string) {
+export function useDailySummary(date?: string, createdBy?: string) {
   return useQuery({
     queryKey: ordersKeys.dailySummary(date),
-    queryFn: () => ordersApi.getDailySummary(date),
+    queryFn: () => ordersApi.getDailySummary(date, createdBy),
   });
 }
 
