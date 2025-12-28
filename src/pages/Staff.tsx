@@ -7,6 +7,7 @@ import {
   useUpdateStaff,
   useDeleteStaff,
   useResetStaffPassword,
+  useUpdateStaffEmail,
 } from "@/hooks/useStaff";
 import { StaffHeader } from "@/components/staff/StaffHeader";
 import { StaffTable } from "@/components/staff/StaffTable";
@@ -41,6 +42,7 @@ const Staff = () => {
   const updateStaffMutation = useUpdateStaff();
   const deleteStaffMutation = useDeleteStaff();
   const resetPasswordMutation = useResetStaffPassword();
+  const updateEmailMutation = useUpdateStaffEmail();
 
   // Transform staff data to match expected format
   const transformedStaff: StaffMember[] = staffMembers.map((s) => ({
@@ -101,28 +103,56 @@ const Staff = () => {
     }
   };
 
-  const handleSaveStaff = (data: {
+  const handleSaveStaff = async (data: {
     email?: string;
     password?: string;
     fullName: string;
     role: AppRole;
+    newEmail?: string;
   }) => {
     if (isEditing && selectedStaff) {
-      updateStaffMutation.mutate(
-        {
-          id: selectedStaff.id,
-          data: {
-            full_name: data.fullName,
-            role: data.role,
+      // If email is being updated, do that first
+      if (data.newEmail) {
+        updateEmailMutation.mutate(
+          { id: selectedStaff.id, newEmail: data.newEmail },
+          {
+            onSuccess: () => {
+              // Then update other fields
+              updateStaffMutation.mutate(
+                {
+                  id: selectedStaff.id,
+                  data: {
+                    full_name: data.fullName,
+                    role: data.role,
+                  },
+                },
+                {
+                  onSuccess: () => {
+                    setIsAddEditDialogOpen(false);
+                    setSelectedStaff(null);
+                  },
+                }
+              );
+            },
+          }
+        );
+      } else {
+        updateStaffMutation.mutate(
+          {
+            id: selectedStaff.id,
+            data: {
+              full_name: data.fullName,
+              role: data.role,
+            },
           },
-        },
-        {
-          onSuccess: () => {
-            setIsAddEditDialogOpen(false);
-            setSelectedStaff(null);
-          },
-        }
-      );
+          {
+            onSuccess: () => {
+              setIsAddEditDialogOpen(false);
+              setSelectedStaff(null);
+            },
+          }
+        );
+      }
     } else if (data.email && data.password) {
       createStaffMutation.mutate(
         {
@@ -179,7 +209,7 @@ const Staff = () => {
         open={isAddEditDialogOpen}
         onOpenChange={setIsAddEditDialogOpen}
         onSave={handleSaveStaff}
-        isSaving={createStaffMutation.isPending || updateStaffMutation.isPending}
+        isSaving={createStaffMutation.isPending || updateStaffMutation.isPending || updateEmailMutation.isPending}
         isEditing={isEditing}
         currentUserRole={currentUserRole}
       />

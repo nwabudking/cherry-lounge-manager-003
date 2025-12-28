@@ -143,6 +143,18 @@ export const staffApi = {
     return await staffApi.getStaffMember(id);
   },
 
+  updateEmail: async (id: string, newEmail: string): Promise<void> => {
+    const { data, error } = await supabase.functions.invoke('manage-staff', {
+      body: {
+        action: 'update-email',
+        userId: id,
+        newEmail,
+      },
+    });
+    if (error) throw new Error(error.message);
+    if (data?.error) throw new Error(data.error);
+  },
+
   deleteStaff: async (id: string): Promise<void> => {
     const { error } = await supabase.functions.invoke('manage-staff', {
       body: { action: 'delete', userId: id },

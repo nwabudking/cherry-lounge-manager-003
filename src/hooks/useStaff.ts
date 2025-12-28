@@ -92,6 +92,22 @@ export function useResetStaffPassword() {
   });
 }
 
+export function useUpdateStaffEmail() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: ({ id, newEmail }: { id: string; newEmail: string }) => 
+      staffApi.updateEmail(id, newEmail),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: staffKeys.all });
+      toast.success('Email updated successfully');
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || 'Failed to update email');
+    },
+  });
+}
+
 export function useUpdateStaffRole() {
   const queryClient = useQueryClient();
   
