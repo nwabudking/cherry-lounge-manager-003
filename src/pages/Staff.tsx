@@ -35,7 +35,8 @@ const Staff = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState<string>("all");
 
-  const { data: staffMembers = [], isLoading } = useStaff();
+  const { data: rawStaffMembers, isLoading } = useStaff();
+  const staffMembers = Array.isArray(rawStaffMembers) ? rawStaffMembers : [];
   const createStaffMutation = useCreateStaff();
   const updateStaffMutation = useUpdateStaff();
   const deleteStaffMutation = useDeleteStaff();

@@ -69,9 +69,13 @@ const Inventory = () => {
   const [movementItem, setMovementItem] = useState<InventoryItem | null>(null);
   const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
 
-  const { data: items = [], isLoading } = useInventoryItems();
-  const { data: suppliers = [], isLoading: suppliersLoading } = useSuppliers();
-  const { data: menuCategories = [] } = useMenuCategories();
+  const { data: rawItems, isLoading } = useInventoryItems();
+  const { data: rawSuppliers, isLoading: suppliersLoading } = useSuppliers();
+  const { data: rawMenuCategories } = useMenuCategories();
+
+  const items = Array.isArray(rawItems) ? rawItems : [];
+  const suppliers = Array.isArray(rawSuppliers) ? rawSuppliers : [];
+  const menuCategories = Array.isArray(rawMenuCategories) ? rawMenuCategories : [];
 
   const createItemMutation = useCreateInventoryItem();
   const updateItemMutation = useUpdateInventoryItem();

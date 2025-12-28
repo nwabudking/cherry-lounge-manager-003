@@ -23,7 +23,7 @@ const Kitchen = () => {
   const [filter, setFilter] = useState<"pending" | "preparing" | "all">("pending");
 
   // Fetch drink category IDs to filter out drink orders (works in both Docker/MySQL and Lovable Cloud)
-  const { data: drinkCategoryIds = [] } = useQuery({
+  const { data: rawDrinkCategoryIds } = useQuery({
     queryKey: ["drink-categories"],
     queryFn: async () => {
       const categories = await menuApi.getCategories();
@@ -33,9 +33,10 @@ const Kitchen = () => {
     },
     staleTime: 5 * 60 * 1000, // Cache for 5 minutes
   });
+  const drinkCategoryIds = Array.isArray(rawDrinkCategoryIds) ? rawDrinkCategoryIds : [];
 
   // Fetch menu items to check which items belong to drink categories
-  const { data: menuItemCategories = {} } = useQuery({
+  const { data: rawMenuItemCategories } = useQuery({
     queryKey: ["menu-item-categories"],
     queryFn: async () => {
       const items = await menuApi.getMenuItems();
@@ -47,34 +48,36 @@ const Kitchen = () => {
     },
     staleTime: 5 * 60 * 1000,
   });
+  const menuItemCategories = rawMenuItemCategories && typeof rawMenuItemCategories === 'object' ? rawMenuItemCategories : {};
 
   // Fetch kitchen orders (only active orders with food items)
-  const { data: orders = [], isLoading } = useQuery({
+  const { data: rawOrders, isLoading } = useQuery({
     queryKey: ["kitchen-orders", filter, drinkCategoryIds, menuItemCategories],
     queryFn: async () => {
       const allOrders = await ordersApi.getOrders();
-      const activeStatuses = filter === "all" 
-        ? ["pending", "preparing", "ready"] 
-        : [filter];
-      
+      const safeOrders = Array.isArray(allOrders) ? allOrders : [];
+      const activeStatuses =
+        filter === "all" ? ["pending", "preparing", "ready"] : [filter];
+
       // Filter orders that have at least one food item (non-drink category)
-      return allOrders.filter((order) => {
+      return safeOrders.filter((order) => {
         // Must be an active status
         if (!activeStatuses.includes(order.status)) return false;
-        
+
         // Check if order has any food items
         const hasFoodItems = order.items?.some((item) => {
-          const categoryId = menuItemCategories[item.menu_item_id || ""];
+          const categoryId = (menuItemCategories as any)[item.menu_item_id || ""];
           // If no category or category is not a drink category, it's food
           return !categoryId || !drinkCategoryIds.includes(categoryId);
         });
-        
+
         return hasFoodItems;
       });
     },
     refetchInterval: 10000,
     enabled: drinkCategoryIds.length >= 0 && Object.keys(menuItemCategories).length >= 0,
   });
+  const orders = Array.isArray(rawOrders) ? rawOrders : [];
 
   const updateStatusMutation = useMutation({
     mutationFn: async ({ orderId, status }: { orderId: string; status: string }) => {

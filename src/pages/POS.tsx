@@ -44,8 +44,10 @@ const POS = () => {
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [completedOrder, setCompletedOrder] = useState<CompletedOrder | null>(null);
 
-  const { data: categories = [] } = useActiveMenuCategories();
-  const { data: menuItems = [] } = useActiveMenuItems(selectedCategory || undefined);
+  const { data: rawCategories } = useActiveMenuCategories();
+  const { data: rawMenuItems } = useActiveMenuItems(selectedCategory || undefined);
+  const categories = Array.isArray(rawCategories) ? rawCategories : [];
+  const menuItems = Array.isArray(rawMenuItems) ? rawMenuItems : [];
 
   const createOrderMutation = useMutation({
     mutationFn: async (paymentMethod: string) => {
