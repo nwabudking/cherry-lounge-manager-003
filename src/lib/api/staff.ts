@@ -69,19 +69,19 @@ const getFunctionErrorMessage = (error: unknown) => {
 };
 
 const invokeWithAuth = async <T,>(functionName: string, body: unknown) => {
+  // Ensure there is an active session; functions.invoke will attach the correct JWT automatically
   const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-  const accessToken = sessionData.session?.access_token;
 
-  // Helpful (non-sensitive) debug info
-  console.debug('[staffApi] invokeWithAuth', { functionName, hasSession: !!sessionData.session, hasAccessToken: !!accessToken, sessionError: sessionError?.message });
+  if (sessionError) {
+    throw new Error(`Authentication error. Please log out and log in again. (${sessionError.message})`);
+  }
 
-  if (!accessToken) {
+  if (!sessionData.session) {
     throw new Error('Not authenticated. Please log out and log in again.');
   }
 
   return await supabase.functions.invoke<T>(functionName, {
     body,
-    headers: { Authorization: `Bearer ${accessToken}` },
   });
 };
 
@@ -205,8 +205,9 @@ export const staffApi = {
   },
 
   resetPassword: async (id: string, newPassword: string): Promise<void> => {
-    const { error } = await supabase.functions.invoke('reset-staff-password', {
-      body: { userId: id, newPassword },
+    const { error } = await invokeWithAuth('reset-staff-password', {
+      userId: id,
+      newPassword,
     });
     if (error) throw new Error(getFunctionErrorMessage(error));
   },
