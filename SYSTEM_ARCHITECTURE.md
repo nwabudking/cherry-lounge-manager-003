@@ -1131,24 +1131,43 @@ Default timezone is `Africa/Lagos`. Configure in `restaurant_settings` table.
 
 ### Error Handling
 
-- **Page-Level Error Boundaries**: All routes are wrapped with `ErrorBoundary` components
+- **Page-Level Error Boundaries**: All routes are wrapped with `ErrorBoundary` components via `SafeRoute`
 - **Safe Array Handling**: All API responses use `ensureArray()` helper functions
 - **Null Guards**: Proper null/undefined checks before `.map()`, `.reduce()` operations
 
+### Authentication & Initial Setup
+
+- **First-Time Setup Flow**: When no super_admin exists, the Auth page shows a signup form to create the initial super_admin
+- **Signup Disabled After Setup**: Once a super_admin exists, public signup is disabled permanently
+- **Staff Creation**: Only via authenticated admin panel by privileged users
+
 ### Role-Based Access
 
-- **Personal Views**: Cashiers see only their own sales data
+- **Personal Views**: Cashiers see only their own sales data in Dashboard and Reports
 - **System-Wide Views**: Managers, Admins, and Super Admins see all data
-- **Role Hierarchy**:
-  - `super_admin` → Can create: admin, manager, cashier
-  - `admin` → Can create: manager, cashier
-  - `manager` → Can create: cashier
+- **Role Hierarchy** (enforced in both frontend and backend):
+  - `super_admin` → Can create: all roles including admin
+  - `admin` → Can create: manager, cashier, bar_staff, kitchen_staff, inventory_officer, accountant
+  - `manager` → Can create: cashier, bar_staff, kitchen_staff, inventory_officer, accountant
   - `cashier` → Cannot create users
+
+### Stock Validation
+
+- **Pre-Order Validation**: Stock availability is checked before order commit
+- **Negative Stock Prevention**: Orders fail if requested quantity exceeds available stock
+- **Decimal Quantity Support**: Both inventory and orders support decimal quantities
+- **Accurate Deduction**: Stock movements are recorded after successful order creation
 
 ### UUID Handling
 
 - Uses `crypto.randomUUID()` with fallback to Math.random-based generation
 - Works across all environments (modern browsers, Docker, older Node.js)
+
+### Data Accuracy
+
+- All dashboard statistics computed directly from Supabase `orders` table
+- No cached or mock data - real-time queries
+- POS, Dashboard, Reports all use the same underlying data source
 
 ---
 
@@ -1159,4 +1178,4 @@ For deployment assistance or custom development, refer to the project documentat
 ---
 
 *Last Updated: December 2024*
-*Version: 1.1.0 - Supabase-Only Architecture*
+*Version: 1.2.0 - Complete Stabilization*
