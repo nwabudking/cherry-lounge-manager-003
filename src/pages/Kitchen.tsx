@@ -5,8 +5,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
-import { ordersApi, Order } from "@/lib/api/orders";
-import { supabase } from "@/integrations/supabase/client";
+import { ordersApi } from "@/lib/api/orders";
+import { menuApi } from "@/lib/api/menu";
 import { ChefHat, Clock, CheckCircle2, RefreshCw, Flame } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
@@ -22,16 +22,14 @@ const Kitchen = () => {
   const queryClient = useQueryClient();
   const [filter, setFilter] = useState<"pending" | "preparing" | "all">("pending");
 
-  // Fetch drink category IDs to filter out drink orders
+  // Fetch drink category IDs to filter out drink orders (works in both Docker/MySQL and Lovable Cloud)
   const { data: drinkCategoryIds = [] } = useQuery({
     queryKey: ["drink-categories"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("menu_categories")
-        .select("id")
-        .eq("category_type", "drink");
-      if (error) throw error;
-      return data.map((c) => c.id);
+      const categories = await menuApi.getCategories();
+      return categories
+        .filter((c) => (c as any).category_type === "drink")
+        .map((c) => c.id);
     },
     staleTime: 5 * 60 * 1000, // Cache for 5 minutes
   });
@@ -40,12 +38,9 @@ const Kitchen = () => {
   const { data: menuItemCategories = {} } = useQuery({
     queryKey: ["menu-item-categories"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("menu_items")
-        .select("id, category_id");
-      if (error) throw error;
+      const items = await menuApi.getMenuItems();
       const map: Record<string, string | null> = {};
-      data.forEach((item) => {
+      items.forEach((item) => {
         map[item.id] = item.category_id;
       });
       return map;

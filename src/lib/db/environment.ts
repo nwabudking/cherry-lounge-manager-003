@@ -43,9 +43,9 @@ function hasSupabaseConfig(): boolean {
 
 // Check if MySQL/REST API is configured
 function hasMySQLConfig(): boolean {
-  // REST API is always available at /api in Docker, or custom URL
-  const apiUrl = import.meta.env.VITE_API_URL || '/api';
-  return !!apiUrl;
+  // Only treat MySQL REST as "configured" if we're explicitly in offline/Docker mode
+  // or the project has a real API URL provided.
+  return isOfflineEnvironment() || !!import.meta.env.VITE_API_URL;
 }
 
 // Determine the database mode
@@ -106,6 +106,19 @@ export function isDatabaseMode(mode: DatabaseMode): boolean {
   return getEnvironmentConfig().mode === mode;
 }
 
+export function hasAnyDatabaseConfigured(): boolean {
+  const config = getEnvironmentConfig();
+  return config.supabaseAvailable || config.mysqlAvailable;
+}
+
+export function assertDatabaseConfigured(): void {
+  if (!hasAnyDatabaseConfigured()) {
+    throw new Error(
+      'No database configured. Configure Lovable Cloud or set VITE_API_URL for MySQL REST.'
+    );
+  }
+}
+
 // Helper to check if Supabase should be used for reads
 export function useSupabaseForReads(): boolean {
   const config = getEnvironmentConfig();
@@ -115,7 +128,7 @@ export function useSupabaseForReads(): boolean {
 // Helper to check if MySQL should be used for reads
 export function useMySQLForReads(): boolean {
   const config = getEnvironmentConfig();
-  return config.mode === 'mysql';
+  return config.mode === 'mysql' || (config.mode === 'hybrid' && config.mysqlAvailable);
 }
 
 // Helper to check if writes should go to both databases
