@@ -69,11 +69,14 @@ const getFunctionErrorMessage = (error: unknown) => {
 };
 
 const invokeWithAuth = async <T,>(functionName: string, body: unknown) => {
-  const { data: sessionData } = await supabase.auth.getSession();
+  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
   const accessToken = sessionData.session?.access_token;
 
+  // Helpful (non-sensitive) debug info
+  console.debug('[staffApi] invokeWithAuth', { functionName, hasSession: !!sessionData.session, hasAccessToken: !!accessToken, sessionError: sessionError?.message });
+
   if (!accessToken) {
-    throw new Error('Not authenticated. Please log in again.');
+    throw new Error('Not authenticated. Please log out and log in again.');
   }
 
   return await supabase.functions.invoke<T>(functionName, {
