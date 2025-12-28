@@ -25,7 +25,10 @@ router.post('/import', authMiddleware, roleMiddleware('super_admin'), async (req
             [id, cat.name, cat.category_type || 'food', cat.sort_order || 0, cat.is_active !== false]
           );
           inserted++;
-        } catch (e) { errors.push(e.message); }
+        } catch (e) { 
+          console.error('Category import error:', e.message);
+          errors.push(`${cat.name}: ${e.message}`); 
+        }
       }
       results.menu_categories = { inserted, errors };
     }
@@ -38,11 +41,14 @@ router.post('/import', authMiddleware, roleMiddleware('super_admin'), async (req
         try {
           const id = item.id || uuidv4();
           await conn.execute(
-            'INSERT INTO inventory_items (id, name, category, unit, current_stock, min_stock_level, cost_per_unit, supplier, supplier_id, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW()) ON DUPLICATE KEY UPDATE name=VALUES(name), category=VALUES(category), unit=VALUES(unit), current_stock=VALUES(current_stock), min_stock_level=VALUES(min_stock_level), cost_per_unit=VALUES(cost_per_unit), supplier=VALUES(supplier)',
-            [id, item.name, item.category, item.unit || 'pcs', item.current_stock || 0, item.min_stock_level || 5, item.cost_per_unit, item.supplier, item.supplier_id, item.is_active !== false]
+            'INSERT INTO inventory_items (id, name, category, unit, current_stock, min_stock_level, cost_per_unit, supplier, supplier_id, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW()) ON DUPLICATE KEY UPDATE name=VALUES(name), category=VALUES(category), unit=VALUES(unit), current_stock=VALUES(current_stock), min_stock_level=VALUES(min_stock_level), cost_per_unit=VALUES(cost_per_unit), supplier=VALUES(supplier), supplier_id=VALUES(supplier_id), is_active=VALUES(is_active)',
+            [id, item.name, item.category || null, item.unit || 'pcs', item.current_stock || 0, item.min_stock_level || 5, item.cost_per_unit || null, item.supplier || null, item.supplier_id || null, item.is_active !== false]
           );
           inserted++;
-        } catch (e) { errors.push(e.message); }
+        } catch (e) { 
+          console.error('Inventory import error:', e.message);
+          errors.push(`${item.name}: ${e.message}`); 
+        }
       }
       results.inventory_items = { inserted, errors };
     }
@@ -55,11 +61,14 @@ router.post('/import', authMiddleware, roleMiddleware('super_admin'), async (req
         try {
           const id = item.id || uuidv4();
           await conn.execute(
-            'INSERT INTO menu_items (id, name, description, price, cost_price, category_id, image_url, is_active, is_available, inventory_item_id, track_inventory, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW()) ON DUPLICATE KEY UPDATE name=VALUES(name), description=VALUES(description), price=VALUES(price), cost_price=VALUES(cost_price), category_id=VALUES(category_id), image_url=VALUES(image_url), is_active=VALUES(is_active), is_available=VALUES(is_available)',
-            [id, item.name, item.description, item.price || 0, item.cost_price, item.category_id, item.image_url, item.is_active !== false, item.is_available !== false, item.inventory_item_id, item.track_inventory || false]
+            'INSERT INTO menu_items (id, name, description, price, cost_price, category_id, image_url, is_active, is_available, inventory_item_id, track_inventory, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW()) ON DUPLICATE KEY UPDATE name=VALUES(name), description=VALUES(description), price=VALUES(price), cost_price=VALUES(cost_price), category_id=VALUES(category_id), image_url=VALUES(image_url), is_active=VALUES(is_active), is_available=VALUES(is_available), inventory_item_id=VALUES(inventory_item_id), track_inventory=VALUES(track_inventory)',
+            [id, item.name, item.description || null, item.price || 0, item.cost_price || null, item.category_id || null, item.image_url || null, item.is_active !== false, item.is_available !== false, item.inventory_item_id || null, item.track_inventory || false]
           );
           inserted++;
-        } catch (e) { errors.push(e.message); }
+        } catch (e) { 
+          console.error('Menu item import error:', e.message);
+          errors.push(`${item.name}: ${e.message}`); 
+        }
       }
       results.menu_items = { inserted, errors };
     }
