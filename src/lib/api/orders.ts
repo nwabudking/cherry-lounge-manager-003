@@ -134,7 +134,11 @@ export const ordersApi = {
     const vatAmount = 0;
     const totalAmount = subtotal - discountAmount + serviceCharge + vatAmount;
 
-    // 1. Create order
+    // Get current user ID
+    const { data: { user } } = await supabase.auth.getUser();
+    const userId = user?.id || null;
+
+    // 1. Create order with created_by set to current user
     const { data: order, error: orderError } = await supabase
       .from('orders')
       .insert({
@@ -148,6 +152,7 @@ export const ordersApi = {
         service_charge: serviceCharge,
         total_amount: totalAmount,
         notes: orderData.notes || null,
+        created_by: userId,
       })
       .select()
       .single();
@@ -171,7 +176,7 @@ export const ordersApi = {
 
     if (itemsError) throw new Error(itemsError.message);
 
-    // 3. Create payment
+    // 3. Create payment with created_by
     const { error: paymentError } = await supabase
       .from('payments')
       .insert({
@@ -180,6 +185,7 @@ export const ordersApi = {
         payment_method: orderData.payment.payment_method,
         reference: orderData.payment.reference || null,
         status: 'completed',
+        created_by: userId,
       });
 
     if (paymentError) throw new Error(paymentError.message);
@@ -218,6 +224,7 @@ export const ordersApi = {
               new_stock: newStock,
               reference: orderNumber,
               notes: `Sale: Order ${orderNumber}`,
+              created_by: userId,
             });
         }
       }
