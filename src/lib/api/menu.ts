@@ -1,4 +1,6 @@
 import apiClient from './client';
+import { supabase } from '@/integrations/supabase/client';
+import { useSupabaseForReads } from '@/lib/db/environment';
 
 export interface MenuCategory {
   id: string;
@@ -31,6 +33,8 @@ export interface MenuItem {
     min_stock_level: number;
   } | null;
 }
+
+const ensureArray = <T,>(value: unknown): T[] => (Array.isArray(value) ? (value as T[]) : []);
 
 export const menuApi = {
   // Categories
@@ -69,10 +73,27 @@ export const menuApi = {
   },
 
   getActiveMenuItems: async (categoryId?: string): Promise<MenuItem[]> => {
+    // Lovable Cloud / Supabase reads
+    if (useSupabaseForReads()) {
+      let query = supabase
+        .from('menu_items')
+        .select('*')
+        .eq('is_active', true)
+        .eq('is_available', true)
+        .order('created_at', { ascending: false });
+
+      if (categoryId) query = query.eq('category_id', categoryId);
+
+      const { data, error } = await query;
+      if (error) return [];
+      return ensureArray<MenuItem>(data);
+    }
+
+    // Docker/MySQL REST reads
     const response = await apiClient.get<MenuItem[]>('/menu/items', {
       params: { active: true, ...(categoryId && { categoryId }) },
     });
-    return response.data;
+    return ensureArray<MenuItem>(response.data);
   },
 
   getMenuItem: async (id: string): Promise<MenuItem> => {
@@ -110,3 +131,4 @@ export const menuApi = {
     return response.data.count;
   },
 };
+

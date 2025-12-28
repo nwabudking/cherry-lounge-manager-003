@@ -1,4 +1,6 @@
 import apiClient from './client';
+import { supabase } from '@/integrations/supabase/client';
+import { useSupabaseForReads } from '@/lib/db/environment';
 
 export interface OrderItem {
   id: string;
@@ -69,10 +71,31 @@ export interface OrderFilters {
   search?: string;
 }
 
+const ensureArray = <T,>(value: unknown): T[] => (Array.isArray(value) ? (value as T[]) : []);
+
 export const ordersApi = {
   getOrders: async (filters?: OrderFilters): Promise<Order[]> => {
+    // Lovable Cloud / Supabase reads
+    if (useSupabaseForReads()) {
+      let query = supabase
+        .from('orders')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (filters?.status) query = query.eq('status', filters.status);
+      if (filters?.orderType) query = query.eq('order_type', filters.orderType);
+      if (filters?.startDate) query = query.gte('created_at', filters.startDate);
+      if (filters?.endDate) query = query.lte('created_at', filters.endDate);
+      // "search" intentionally not applied here (requires server-side search semantics)
+
+      const { data, error } = await query;
+      if (error) return [];
+      return ensureArray<Order>(data);
+    }
+
+    // Docker/MySQL REST reads
     const response = await apiClient.get<Order[]>('/orders', { params: filters });
-    return response.data;
+    return ensureArray<Order>(response.data);
   },
 
   getOrder: async (id: string): Promise<Order> => {
@@ -128,8 +151,8 @@ export const ordersApi = {
   },
 
   getOrdersWithDetails: async (filters?: OrderFilters): Promise<Order[]> => {
-    const response = await apiClient.get<Order[]>('/orders', { 
-      params: { ...filters, includeItems: true, includePayments: true } 
+    const response = await apiClient.get<Order[]>('/orders', {
+      params: { ...filters, includeItems: true, includePayments: true }
     });
     return response.data;
   },
@@ -148,3 +171,4 @@ export const ordersApi = {
     return response.data;
   },
 };
+
