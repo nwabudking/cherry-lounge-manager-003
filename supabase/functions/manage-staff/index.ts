@@ -273,7 +273,10 @@ serve(async (req) => {
     if (action === "update-email") {
       const { userId, newEmail } = body;
       
+      console.log("Update email request - userId:", userId, "newEmail:", newEmail);
+      
       if (!userId || !newEmail) {
+        console.log("Missing userId or newEmail");
         return new Response(JSON.stringify({ error: "User ID and new email required" }), {
           status: 400,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -282,6 +285,7 @@ serve(async (req) => {
 
       // Only super_admin can update emails
       if (requestingUserRole !== "super_admin") {
+        console.log("Non-super_admin tried to update email:", requestingUserRole);
         return new Response(JSON.stringify({ error: "Only super admin can update user emails" }), {
           status: 403,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -289,12 +293,14 @@ serve(async (req) => {
       }
 
       // Update auth user email
+      console.log("Updating auth user email...");
       const { error: updateAuthError } = await supabaseAdmin.auth.admin.updateUserById(userId, {
         email: newEmail,
         email_confirm: true,
       });
 
       if (updateAuthError) {
+        console.error("Auth update error:", updateAuthError);
         return new Response(JSON.stringify({ error: updateAuthError.message }), {
           status: 400,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -302,8 +308,14 @@ serve(async (req) => {
       }
 
       // Update profile email
-      await supabaseAdmin.from("profiles").update({ email: newEmail }).eq("id", userId);
+      console.log("Updating profile email...");
+      const { error: profileError } = await supabaseAdmin.from("profiles").update({ email: newEmail }).eq("id", userId);
+      
+      if (profileError) {
+        console.error("Profile update error:", profileError);
+      }
 
+      console.log("Email update successful");
       return new Response(JSON.stringify({ success: true }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
