@@ -69,19 +69,23 @@ const getFunctionErrorMessage = (error: unknown) => {
 };
 
 const invokeWithAuth = async <T,>(functionName: string, body: unknown) => {
-  // Ensure there is an active session; functions.invoke will attach the correct JWT automatically
+  // Keep an explicit token header; some backends won’t receive the session token automatically
   const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
 
   if (sessionError) {
     throw new Error(`Authentication error. Please log out and log in again. (${sessionError.message})`);
   }
 
-  if (!sessionData.session) {
+  const accessToken = sessionData.session?.access_token;
+  if (!accessToken) {
     throw new Error('Not authenticated. Please log out and log in again.');
   }
 
   return await supabase.functions.invoke<T>(functionName, {
     body,
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
   });
 };
 
