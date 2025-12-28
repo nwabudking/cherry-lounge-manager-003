@@ -22,6 +22,7 @@ interface StaffHeaderProps {
 
 const roleLabels: Record<string, string> = {
   super_admin: "Super Admin",
+  admin: "Admin",
   manager: "Manager",
   cashier: "Cashier",
   bar_staff: "Bar Staff",

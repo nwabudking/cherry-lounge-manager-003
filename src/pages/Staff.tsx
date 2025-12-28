@@ -63,7 +63,7 @@ const Staff = () => {
     return matchesSearch && matchesRole;
   });
 
-  const canManageStaff = currentUserRole === "super_admin" || currentUserRole === "manager";
+  const canManageStaff = currentUserRole === "super_admin" || currentUserRole === "admin" || currentUserRole === "manager";
 
   const handleAddStaff = () => {
     setSelectedStaff(null);
@@ -181,6 +181,7 @@ const Staff = () => {
         onSave={handleSaveStaff}
         isSaving={createStaffMutation.isPending || updateStaffMutation.isPending}
         isEditing={isEditing}
+        currentUserRole={currentUserRole}
       />
 
       <DeleteStaffDialog

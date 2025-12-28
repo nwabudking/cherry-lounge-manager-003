@@ -31,10 +31,12 @@ interface AddEditStaffDialogProps {
   }) => void;
   isSaving: boolean;
   isEditing: boolean;
+  currentUserRole?: AppRole | null;
 }
 
-const roles: { value: AppRole; label: string }[] = [
+const allRoles: { value: AppRole; label: string }[] = [
   { value: "super_admin", label: "Super Admin" },
+  { value: "admin", label: "Admin" },
   { value: "manager", label: "Manager" },
   { value: "cashier", label: "Cashier" },
   { value: "bar_staff", label: "Bar Staff" },
@@ -43,6 +45,25 @@ const roles: { value: AppRole; label: string }[] = [
   { value: "accountant", label: "Accountant" },
 ];
 
+// Get assignable roles based on current user's role
+const getAssignableRoles = (userRole?: AppRole | null): { value: AppRole; label: string }[] => {
+  if (!userRole) return [];
+  
+  switch (userRole) {
+    case "super_admin":
+      // Super admin can assign all roles
+      return allRoles;
+    case "admin":
+      // Admin can assign manager and below, but NOT super_admin or admin
+      return allRoles.filter(r => !["super_admin", "admin"].includes(r.value));
+    case "manager":
+      // Manager can assign staff roles only, NOT admin or super_admin
+      return allRoles.filter(r => !["super_admin", "admin", "manager"].includes(r.value));
+    default:
+      return [];
+  }
+};
+
 export const AddEditStaffDialog = ({
   staff,
   open,
@@ -50,12 +71,15 @@ export const AddEditStaffDialog = ({
   onSave,
   isSaving,
   isEditing,
+  currentUserRole,
 }: AddEditStaffDialogProps) => {
+  const assignableRoles = getAssignableRoles(currentUserRole);
+  const defaultRole = assignableRoles.length > 0 ? assignableRoles[assignableRoles.length - 1].value : "cashier";
   const [formData, setFormData] = useState({
     email: "",
     password: "",
     fullName: "",
-    role: "cashier" as AppRole,
+    role: defaultRole,
   });
 
   useEffect(() => {
@@ -71,10 +95,10 @@ export const AddEditStaffDialog = ({
         email: "",
         password: "",
         fullName: "",
-        role: "cashier",
+        role: defaultRole,
       });
     }
-  }, [staff, isEditing, open]);
+  }, [staff, isEditing, open, defaultRole]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -160,7 +184,7 @@ export const AddEditStaffDialog = ({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {roles.map((role) => (
+                {assignableRoles.map((role) => (
                   <SelectItem key={role.value} value={role.value}>
                     {role.label}
                   </SelectItem>

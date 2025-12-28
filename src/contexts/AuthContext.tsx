@@ -2,7 +2,7 @@ import React, { createContext, useContext, useEffect, useState, useCallback } fr
 import { unifiedAuth, User } from '@/lib/auth';
 import { supabase } from '@/integrations/supabase/client';
 
-export type AppRole = 'super_admin' | 'manager' | 'cashier' | 'bar_staff' | 'kitchen_staff' | 'inventory_officer' | 'accountant';
+export type AppRole = 'super_admin' | 'admin' | 'manager' | 'cashier' | 'bar_staff' | 'kitchen_staff' | 'inventory_officer' | 'accountant';
 
 interface AuthContextType {
   user: User | null;
