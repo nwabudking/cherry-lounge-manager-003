@@ -173,26 +173,20 @@ serve(async (req) => {
         console.error("Profile upsert error:", profileError);
       }
 
-      // Assign role - delete existing first (trigger may have created default 'cashier')
+      // Assign role (single role per user)
       if (role) {
         console.log("Assigning role:", role);
-        
-        // Delete any existing role first
-        const { error: deleteRoleError } = await supabaseAdmin
+
+        const { error: roleError } = await supabaseAdmin
           .from("user_roles")
-          .delete()
-          .eq("user_id", newUser.user.id);
-        
-        if (deleteRoleError) {
-          console.error("Delete existing role error:", deleteRoleError);
-        }
-        
-        // Insert the correct role
-        const { error: roleError } = await supabaseAdmin.from("user_roles").insert({
-          user_id: newUser.user.id,
-          role,
-        });
-        
+          .upsert(
+            {
+              user_id: newUser.user.id,
+              role,
+            },
+            { onConflict: "user_id" }
+          );
+
         if (roleError) {
           console.error("Role assignment error:", roleError);
           return new Response(JSON.stringify({ error: `Failed to assign role: ${roleError.message}` }), {
@@ -200,7 +194,7 @@ serve(async (req) => {
             headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
         }
-        
+
         console.log("Role assigned successfully:", role);
       }
 
@@ -296,18 +290,17 @@ serve(async (req) => {
         await supabaseAdmin.from("profiles").update({ full_name: fullName }).eq("id", userId);
       }
 
-      // Update role
+      // Update role (single role per user)
       if (role) {
-        const { data: existingRole } = await supabaseAdmin
+        const { error: roleUpsertError } = await supabaseAdmin
           .from("user_roles")
-          .select("id")
-          .eq("user_id", userId)
-          .maybeSingle();
+          .upsert({ user_id: userId, role }, { onConflict: "user_id" });
 
-        if (existingRole) {
-          await supabaseAdmin.from("user_roles").update({ role }).eq("user_id", userId);
-        } else {
-          await supabaseAdmin.from("user_roles").insert({ user_id: userId, role });
+        if (roleUpsertError) {
+          return new Response(JSON.stringify({ error: roleUpsertError.message }), {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
         }
       }
 
