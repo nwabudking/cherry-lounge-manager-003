@@ -1111,6 +1111,47 @@ Default timezone is `Africa/Lagos`. Configure in `restaurant_settings` table.
 
 ---
 
+## System Stabilization Notes
+
+### Architecture Decisions
+
+- **Supabase-Only Backend**: The system uses Supabase exclusively for all backend operations. MySQL/SQL Server references have been removed.
+- **Offline Mode**: For offline deployment, use the self-hosted Supabase stack in Docker (`docker/docker-compose.supabase.yml`)
+- **No Alternate Databases**: Only PostgreSQL via Supabase is supported
+
+### Data Integrity
+
+- **Uniqueness Constraints**: Unique indexes exist on normalized names for:
+  - `inventory_items` (active items only)
+  - `menu_items` (active items only)
+  - `suppliers` (active items only)
+  - `menu_categories` (active items only)
+
+- **Duplicate Prevention**: The `normalize_name()` function and `check_duplicate_name()` trigger prevent duplicate entries
+
+### Error Handling
+
+- **Page-Level Error Boundaries**: All routes are wrapped with `ErrorBoundary` components
+- **Safe Array Handling**: All API responses use `ensureArray()` helper functions
+- **Null Guards**: Proper null/undefined checks before `.map()`, `.reduce()` operations
+
+### Role-Based Access
+
+- **Personal Views**: Cashiers see only their own sales data
+- **System-Wide Views**: Managers, Admins, and Super Admins see all data
+- **Role Hierarchy**:
+  - `super_admin` → Can create: admin, manager, cashier
+  - `admin` → Can create: manager, cashier
+  - `manager` → Can create: cashier
+  - `cashier` → Cannot create users
+
+### UUID Handling
+
+- Uses `crypto.randomUUID()` with fallback to Math.random-based generation
+- Works across all environments (modern browsers, Docker, older Node.js)
+
+---
+
 ## Contact & Support
 
 For deployment assistance or custom development, refer to the project documentation or contact the development team.
@@ -1118,4 +1159,4 @@ For deployment assistance or custom development, refer to the project documentat
 ---
 
 *Last Updated: December 2024*
-*Version: 1.0.0*
+*Version: 1.1.0 - Supabase-Only Architecture*

@@ -1,57 +1,42 @@
+# Cherry POS - Supabase-Only Docker Compose
+# This project uses Supabase exclusively for all backend services
+# For self-hosted deployment, use docker/docker-compose.supabase.yml
+#
+# Quick Start:
+#   cd docker && docker-compose -f docker-compose.supabase.yml up -d
+#
+# This file is kept for reference but the main deployment
+# should use the Supabase-specific compose file.
+
 version: '3.8'
 
 services:
-  mysql:
-    image: mysql:8.0
-    container_name: cherry-pos-mysql
-    restart: unless-stopped
-    environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-cherry_root_2024}
-      MYSQL_DATABASE: ${MYSQL_DATABASE:-cherry_dining}
-      MYSQL_USER: ${MYSQL_USER:-pos_user}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-pos_secure_password_2024}
-    ports:
-      - "${MYSQL_PORT:-3306}:3306"
-    volumes:
-      - mysql_data:/var/lib/mysql
-      - ./server/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-cherry_root_2024}"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 30s
-    networks:
-      - cherry-network
+  # For production deployment, use docker/docker-compose.supabase.yml
+  # which includes the full Supabase stack:
+  # - PostgreSQL database
+  # - Auth service (GoTrue)
+  # - REST API (PostgREST)
+  # - Realtime service
+  # - Storage API
+  # - Edge Functions (Deno)
+  # - Kong API Gateway
+  # - Supabase Studio
 
   app:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: docker/Dockerfile.app
     container_name: cherry-pos-app
     restart: unless-stopped
-    depends_on:
-      mysql:
-        condition: service_healthy
     environment:
-      NODE_ENV: production
-      PORT: 3000
-      DB_HOST: mysql
-      DB_PORT: 3306
-      DB_NAME: ${MYSQL_DATABASE:-cherry_dining}
-      DB_USER: ${MYSQL_USER:-pos_user}
-      DB_PASSWORD: ${MYSQL_PASSWORD:-pos_secure_password_2024}
-      JWT_SECRET: ${JWT_SECRET:-cherry_jwt_secret_change_in_production_2024}
-      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-24h}
+      - NODE_ENV=production
     ports:
-      - "${APP_PORT:-3000}:3000"
-    networks:
-      - cherry-network
+      - "${APP_PORT:-3000}:80"
+    # For offline deployment, connect to the self-hosted Supabase network
+    # networks:
+    #   - cherry-network
 
-volumes:
-  mysql_data:
-    driver: local
-
-networks:
-  cherry-network:
-    driver: bridge
+# networks:
+#   cherry-network:
+#     external: true
+#     name: docker_cherry-network
