@@ -161,21 +161,33 @@ serve(async (req) => {
 
       console.log("User created:", newUser.user.id);
 
-      // Create profile
-      console.log("Creating profile...");
-      const { error: profileError } = await supabaseAdmin.from("profiles").insert({
+      // Upsert profile (trigger may have already created it)
+      console.log("Upserting profile...");
+      const { error: profileError } = await supabaseAdmin.from("profiles").upsert({
         id: newUser.user.id,
         email,
         full_name: fullName,
-      });
+      }, { onConflict: 'id' });
       
       if (profileError) {
-        console.error("Profile creation error:", profileError);
+        console.error("Profile upsert error:", profileError);
       }
 
-      // Assign role
+      // Assign role - delete existing first (trigger may have created default 'cashier')
       if (role) {
         console.log("Assigning role:", role);
+        
+        // Delete any existing role first
+        const { error: deleteRoleError } = await supabaseAdmin
+          .from("user_roles")
+          .delete()
+          .eq("user_id", newUser.user.id);
+        
+        if (deleteRoleError) {
+          console.error("Delete existing role error:", deleteRoleError);
+        }
+        
+        // Insert the correct role
         const { error: roleError } = await supabaseAdmin.from("user_roles").insert({
           user_id: newUser.user.id,
           role,
@@ -183,7 +195,13 @@ serve(async (req) => {
         
         if (roleError) {
           console.error("Role assignment error:", roleError);
+          return new Response(JSON.stringify({ error: `Failed to assign role: ${roleError.message}` }), {
+            status: 500,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
         }
+        
+        console.log("Role assigned successfully:", role);
       }
 
       console.log("Staff creation successful");
