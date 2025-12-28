@@ -111,48 +111,35 @@ const Staff = () => {
     newEmail?: string;
   }) => {
     if (isEditing && selectedStaff) {
+      // Check if role is actually changing and if we can change it
+      const roleChanged = data.role !== selectedStaff.role;
+      
       // If email is being updated, do that first
       if (data.newEmail) {
-        updateEmailMutation.mutate(
-          { id: selectedStaff.id, newEmail: data.newEmail },
-          {
-            onSuccess: () => {
-              // Then update other fields
-              updateStaffMutation.mutate(
-                {
-                  id: selectedStaff.id,
-                  data: {
-                    full_name: data.fullName,
-                    role: data.role,
-                  },
-                },
-                {
-                  onSuccess: () => {
-                    setIsAddEditDialogOpen(false);
-                    setSelectedStaff(null);
-                  },
-                }
-              );
-            },
-          }
-        );
-      } else {
-        updateStaffMutation.mutate(
-          {
-            id: selectedStaff.id,
-            data: {
-              full_name: data.fullName,
-              role: data.role,
-            },
-          },
-          {
-            onSuccess: () => {
-              setIsAddEditDialogOpen(false);
-              setSelectedStaff(null);
-            },
-          }
-        );
+        try {
+          await updateEmailMutation.mutateAsync({ id: selectedStaff.id, newEmail: data.newEmail });
+        } catch (err) {
+          // Error is already shown by the hook
+          return;
+        }
       }
+      
+      // Update other fields (only include role if it changed)
+      updateStaffMutation.mutate(
+        {
+          id: selectedStaff.id,
+          data: {
+            full_name: data.fullName,
+            ...(roleChanged ? { role: data.role } : {}),
+          },
+        },
+        {
+          onSuccess: () => {
+            setIsAddEditDialogOpen(false);
+            setSelectedStaff(null);
+          },
+        }
+      );
     } else if (data.email && data.password) {
       createStaffMutation.mutate(
         {
