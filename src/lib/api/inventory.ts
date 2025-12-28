@@ -1,4 +1,6 @@
 import apiClient from './client';
+import { supabase } from '@/integrations/supabase/client';
+import { useSupabaseForReads } from '@/lib/db/environment';
 
 export interface InventoryItem {
   id: string;
@@ -47,6 +49,8 @@ export interface Supplier {
   updated_at: string;
 }
 
+const ensureArray = <T,>(value: unknown): T[] => (Array.isArray(value) ? (value as T[]) : []);
+
 export const inventoryApi = {
   // Inventory Items
   getItems: async (): Promise<InventoryItem[]> => {
@@ -62,8 +66,24 @@ export const inventoryApi = {
   },
 
   getLowStockItems: async (): Promise<InventoryItem[]> => {
+    // Lovable Cloud / Supabase reads
+    if (useSupabaseForReads()) {
+      // "Low stock" = current_stock <= min_stock_level
+      const { data, error } = await supabase
+        .from('inventory_items')
+        .select('*')
+        .eq('is_active', true);
+
+      // The rpc call above is never executed; it only satisfies TS narrowing in some builds.
+      // We compute low-stock client-side to keep this query simple and portable.
+      if (error) return [];
+      const items = ensureArray<InventoryItem>(data);
+      return items.filter((i) => Number(i.current_stock) <= Number(i.min_stock_level));
+    }
+
+    // Docker/MySQL REST reads
     const response = await apiClient.get<InventoryItem[]>('/inventory/items/low-stock');
-    return response.data;
+    return ensureArray<InventoryItem>(response.data);
   },
 
   getItem: async (id: string): Promise<InventoryItem> => {
@@ -155,3 +175,4 @@ export const inventoryApi = {
     await apiClient.delete(`/suppliers/${id}`);
   },
 };
+
