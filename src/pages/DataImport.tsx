@@ -3,7 +3,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
-import { Loader2, Database, CheckCircle2, Upload, Download, Save } from "lucide-react";
+import { Loader2, Database, CheckCircle2, Upload, Download, Save, FileCode } from "lucide-react";
 import { Navigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -35,6 +35,7 @@ export default function DataImport() {
   const { role } = useAuth();
   const [isImporting, setIsImporting] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [isExportingSql, setIsExportingSql] = useState(false);
   const [results, setResults] = useState<Record<string, { inserted: number }> | null>(null);
 
   if (role !== "super_admin") return <Navigate to="/dashboard" replace />;
@@ -92,6 +93,41 @@ export default function DataImport() {
     }
   };
 
+  const handleExportSql = async () => {
+    setIsExportingSql(true);
+    try {
+      const { data: session } = await supabase.auth.getSession();
+      if (!session?.session?.access_token) {
+        toast.error("You must be logged in to export");
+        return;
+      }
+
+      const response = await supabase.functions.invoke('export-database', {
+        headers: {
+          Authorization: `Bearer ${session.session.access_token}`,
+        },
+      });
+
+      if (response.error) {
+        throw new Error(response.error.message || 'Export failed');
+      }
+
+      // The response data is the SQL content
+      const sqlContent = response.data;
+      const blob = new Blob([sqlContent], { type: 'application/sql' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `cherry-pos-data-${new Date().toISOString().split('T')[0]}.sql`;
+      a.click();
+      toast.success("SQL export downloaded!");
+    } catch (e) {
+      console.error('SQL export error:', e);
+      toast.error(e instanceof Error ? e.message : "SQL export failed");
+    } finally {
+      setIsExportingSql(false);
+    }
+  };
+
   return (
     <div className="p-6 max-w-3xl mx-auto space-y-6">
       <h1 className="text-3xl font-bold">Data Management</h1>
@@ -107,12 +143,23 @@ export default function DataImport() {
           </CardContent>
         </Card>
         <Card>
-          <CardHeader><CardTitle><Download className="h-5 w-5 inline mr-2" />Export</CardTitle></CardHeader>
+          <CardHeader><CardTitle><Download className="h-5 w-5 inline mr-2" />Export JSON</CardTitle></CardHeader>
           <CardContent>
             <Button onClick={handleExport} disabled={isExporting} variant="outline" className="w-full">
               {isExporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-              Download Backup
+              Download JSON Backup
             </Button>
+            <p className="text-xs text-muted-foreground mt-2">Export data as JSON file for backup</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader><CardTitle><FileCode className="h-5 w-5 inline mr-2" />Export SQL</CardTitle></CardHeader>
+          <CardContent>
+            <Button onClick={handleExportSql} disabled={isExportingSql} variant="outline" className="w-full">
+              {isExportingSql ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Database className="mr-2 h-4 w-4" />}
+              Download SQL Dump
+            </Button>
+            <p className="text-xs text-muted-foreground mt-2">Export all data as SQL INSERT statements for offline database</p>
           </CardContent>
         </Card>
       </div>

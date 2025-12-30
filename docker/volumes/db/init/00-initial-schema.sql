@@ -11,6 +11,7 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'app_role') THEN
         CREATE TYPE public.app_role AS ENUM (
             'super_admin',
+            'admin',
             'manager',
             'cashier',
             'bar_staff',
@@ -117,12 +118,30 @@ CREATE TABLE IF NOT EXISTS public.menu_items (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Customers table
+CREATE TABLE IF NOT EXISTS public.customers (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name TEXT NOT NULL,
+    phone TEXT,
+    email TEXT,
+    address TEXT,
+    notes TEXT,
+    tags TEXT[] DEFAULT '{}',
+    loyalty_points INTEGER DEFAULT 0,
+    total_orders INTEGER DEFAULT 0,
+    total_spent NUMERIC DEFAULT 0,
+    is_active BOOLEAN DEFAULT true,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- Orders table
 CREATE TABLE IF NOT EXISTS public.orders (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     order_number TEXT NOT NULL UNIQUE,
     order_type TEXT NOT NULL DEFAULT 'dine-in',
     table_number TEXT,
+    customer_id UUID REFERENCES public.customers(id),
     status TEXT DEFAULT 'pending',
     subtotal NUMERIC DEFAULT 0,
     discount_amount NUMERIC DEFAULT 0,
@@ -324,6 +343,7 @@ ALTER TABLE public.suppliers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.menu_categories ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.inventory_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.menu_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.customers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.order_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.payments ENABLE ROW LEVEL SECURITY;
@@ -357,6 +377,10 @@ CREATE POLICY "Staff can manage inventory" ON public.inventory_items FOR ALL TO 
 -- RLS Policies for menu_items
 CREATE POLICY "Anyone can read menu items" ON public.menu_items FOR SELECT USING (true);
 CREATE POLICY "Staff can manage menu items" ON public.menu_items FOR ALL TO authenticated USING (true);
+
+-- RLS Policies for customers
+CREATE POLICY "Authenticated users can read customers" ON public.customers FOR SELECT TO authenticated USING (true);
+CREATE POLICY "Staff can manage customers" ON public.customers FOR ALL TO authenticated USING (true);
 
 -- RLS Policies for orders
 CREATE POLICY "Authenticated users can read orders" ON public.orders FOR SELECT TO authenticated USING (true);
