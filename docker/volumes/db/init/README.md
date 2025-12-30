@@ -1,47 +1,80 @@
 # Database Initialization Files
 
-These SQL files are executed in alphabetical order when the Docker container starts for the first time.
-
-## Files
-
-1. **00-initial-schema.sql** - Creates all tables, functions, triggers, and RLS policies
-2. **01-seed-data.sql** - Sample/demo data for testing
-3. **02-data-dump.sql** - Production data export (partial sample)
-
-## Getting Complete Data
-
-The `02-data-dump.sql` file contains only a sample of the production data. To get the complete current data:
-
-### Option 1: Use the App Export Feature
-1. Log in to the app as super_admin
-2. Navigate to Data Management (/data-import)
-3. Click "Download SQL Dump"
-4. Save the file as `02-data-dump.sql` in this folder
-
-### Option 2: Replace with your own data
-After running the schema, you can manually import your data using psql or any PostgreSQL client.
-
-## Creating the First Super Admin
-
-After importing the schema, you need to create a super_admin user:
-
-```sql
--- 1. First, create a user in auth.users (this is done via Supabase Auth)
--- If you're using local Supabase, you can use the Supabase Studio UI
-
--- 2. After the user is created, update their role to super_admin:
-UPDATE public.user_roles 
-SET role = 'super_admin' 
-WHERE user_id = 'your-user-uuid-here';
-```
-
-Or use the app's initial setup flow - if no super_admin exists, the auth page will show the setup form.
+This folder contains SQL files that are automatically executed when the PostgreSQL container starts for the first time.
 
 ## File Execution Order
 
-Files are executed alphabetically:
-- `00-*` runs first (schema)
-- `01-*` runs second (seed data)
-- `02-*` runs third (production data)
+Files are executed in alphabetical order:
 
-Make sure file names maintain this order!
+1. `00-initial-schema.sql` - Creates all tables, functions, triggers, and RLS policies
+2. `01-seed-data.sql` - Creates the default super admin user
+3. `02-data-dump.sql` - Contains production data exported from the live system
+
+## How to Get Complete Data Dump from Live System
+
+1. **Login as Super Admin** in the live Cherry POS application
+2. **Navigate to Settings → Data Import**
+3. **Click "Download SQL Dump"** - This exports ALL data from ALL tables:
+   - restaurant_settings
+   - suppliers
+   - menu_categories
+   - inventory_items
+   - menu_items
+   - customers
+   - orders
+   - order_items
+   - payments
+   - stock_movements
+   - profiles
+   - user_roles
+
+4. **Replace `02-data-dump.sql`** with the downloaded file content
+
+## What the Export Contains
+
+The SQL dump generates **UPSERT statements** for each record:
+```sql
+INSERT INTO public.table_name (...) VALUES (...)
+ON CONFLICT (id) DO UPDATE SET ...;
+```
+
+This means:
+- ✅ **New records** are inserted
+- ✅ **Existing records** are updated with new values
+- ✅ **No duplicates** are created
+
+## Importing to Offline System
+
+### Option 1: Fresh Start (Recommended)
+1. Stop all containers: `docker compose down -v`
+2. Replace `02-data-dump.sql` with your exported file
+3. Start containers: `docker compose up -d`
+4. The data loads automatically on first boot
+
+### Option 2: Update Running System
+If the database is already running, you can run the SQL directly:
+```bash
+# Connect to the database container
+docker exec -i cherry-db psql -U postgres -d postgres < docker/volumes/db/init/02-data-dump.sql
+```
+
+## Important Notes
+
+- **User profiles and roles** require users to exist in `auth.users` first
+- The seed file creates the default super admin user
+- For additional users, either:
+  1. Create them via the app's staff management
+  2. Add them to `01-seed-data.sql` before first boot
+
+## Verify Data After Import
+
+Connect to the database to verify:
+```bash
+docker exec -it cherry-db psql -U postgres -d postgres -c "
+SELECT 
+  (SELECT COUNT(*) FROM menu_categories) as categories,
+  (SELECT COUNT(*) FROM menu_items) as menu_items,
+  (SELECT COUNT(*) FROM inventory_items) as inventory,
+  (SELECT COUNT(*) FROM orders) as orders;
+"
+```
