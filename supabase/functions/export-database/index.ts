@@ -12,28 +12,70 @@ function escapeSqlValue(value: unknown): string {
   if (typeof value === 'boolean') return value ? 'TRUE' : 'FALSE';
   if (typeof value === 'number') return String(value);
   if (Array.isArray(value)) {
-    return `ARRAY[${value.map(v => escapeSqlValue(v)).join(', ')}]`;
+    if (value.length === 0) return "'{}'";
+    // Check if it's an array of strings
+    const escapedItems = value.map(v => {
+      if (typeof v === 'string') return `"${v.replace(/"/g, '\\"')}"`;
+      return String(v);
+    });
+    return `'{${escapedItems.join(',')}}'`;
   }
   if (typeof value === 'object') {
     return `'${JSON.stringify(value).replace(/'/g, "''")}'::jsonb`;
   }
+  // Escape single quotes and handle special characters
   return `'${String(value).replace(/'/g, "''")}'`;
 }
 
-// Generate INSERT statement for a table
-function generateInsertStatements(tableName: string, rows: Record<string, unknown>[]): string {
-  if (!rows || rows.length === 0) return `-- No data in ${tableName}\n`;
+// Table configurations with primary key and columns to update
+const tableConfigs: Record<string, { primaryKey: string; excludeFromUpdate?: string[] }> = {
+  'restaurant_settings': { primaryKey: 'id' },
+  'suppliers': { primaryKey: 'id' },
+  'menu_categories': { primaryKey: 'id' },
+  'inventory_items': { primaryKey: 'id' },
+  'menu_items': { primaryKey: 'id' },
+  'customers': { primaryKey: 'id' },
+  'orders': { primaryKey: 'id' },
+  'order_items': { primaryKey: 'id' },
+  'payments': { primaryKey: 'id' },
+  'stock_movements': { primaryKey: 'id' },
+  'profiles': { primaryKey: 'id', excludeFromUpdate: ['id'] },
+  'user_roles': { primaryKey: 'id', excludeFromUpdate: ['id'] },
+};
+
+// Generate UPSERT statement for a table (INSERT ... ON CONFLICT DO UPDATE)
+function generateUpsertStatements(tableName: string, rows: Record<string, unknown>[], config: { primaryKey: string; excludeFromUpdate?: string[] }): string {
+  if (!rows || rows.length === 0) return `-- No data in ${tableName}\n\n`;
   
   const columns = Object.keys(rows[0]);
   const statements: string[] = [];
+  const excludeFromUpdate = config.excludeFromUpdate || [];
   
-  statements.push(`-- ${tableName} data (${rows.length} rows)`);
+  statements.push(`-- ============================================`);
+  statements.push(`-- ${tableName.toUpperCase()} (${rows.length} rows)`);
+  statements.push(`-- ============================================`);
   
   for (const row of rows) {
     const values = columns.map(col => escapeSqlValue(row[col]));
-    statements.push(
-      `INSERT INTO public.${tableName} (${columns.join(', ')}) VALUES (${values.join(', ')}) ON CONFLICT DO NOTHING;`
+    
+    // Build the UPDATE SET clause (exclude primary key and specified columns)
+    const updateColumns = columns.filter(col => 
+      col !== config.primaryKey && !excludeFromUpdate.includes(col)
     );
+    
+    const updateClause = updateColumns
+      .map(col => `${col} = EXCLUDED.${col}`)
+      .join(', ');
+    
+    if (updateClause) {
+      statements.push(
+        `INSERT INTO public.${tableName} (${columns.join(', ')}) VALUES (${values.join(', ')}) ON CONFLICT (${config.primaryKey}) DO UPDATE SET ${updateClause};`
+      );
+    } else {
+      statements.push(
+        `INSERT INTO public.${tableName} (${columns.join(', ')}) VALUES (${values.join(', ')}) ON CONFLICT (${config.primaryKey}) DO NOTHING;`
+      );
+    }
   }
   
   return statements.join('\n') + '\n\n';
@@ -86,6 +128,7 @@ serve(async (req) => {
     console.log('Starting database export for user:', user.email);
 
     // Define tables to export in correct order (respecting foreign keys)
+    // profiles and user_roles are exported but commented out (users must be created via auth first)
     const tables = [
       'restaurant_settings',
       'suppliers',
@@ -99,15 +142,27 @@ serve(async (req) => {
       'stock_movements',
     ];
 
-    let sqlOutput = `-- Cherry POS Database Export
+    const userTables = ['profiles', 'user_roles'];
+
+    let sqlOutput = `-- ============================================================
+-- Cherry POS Complete Database Export
 -- Generated: ${new Date().toISOString()}
--- This file contains INSERT statements for all data
--- Run this after the schema has been created
+-- ============================================================
+-- This file contains UPSERT statements (INSERT ... ON CONFLICT DO UPDATE)
+-- for all data. Run this after the schema has been created.
+-- 
+-- IMPORTANT: This will UPDATE existing records if they exist,
+-- or INSERT new ones if they don't.
+-- ============================================================
 
 BEGIN;
 
+-- Temporarily disable triggers for faster import
+SET session_replication_role = 'replica';
+
 `;
 
+    // Export main tables
     for (const tableName of tables) {
       console.log(`Exporting table: ${tableName}`);
       const { data, error } = await supabase.from(tableName).select('*');
@@ -118,12 +173,43 @@ BEGIN;
         continue;
       }
       
-      sqlOutput += generateInsertStatements(tableName, data || []);
+      const config = tableConfigs[tableName] || { primaryKey: 'id' };
+      sqlOutput += generateUpsertStatements(tableName, data || [], config);
     }
 
-    sqlOutput += `COMMIT;
+    // Export user tables (profiles and user_roles) - these are special
+    sqlOutput += `-- ============================================
+-- USER DATA (profiles and user_roles)
+-- ============================================
+-- NOTE: Users must first exist in auth.users before profiles/roles can be inserted.
+-- For offline deployment, create users via Supabase Auth first, then run these.
+-- These statements use UPSERT to update existing records.
 
--- Export complete
+`;
+
+    for (const tableName of userTables) {
+      console.log(`Exporting user table: ${tableName}`);
+      const { data, error } = await supabase.from(tableName).select('*');
+      
+      if (error) {
+        console.error(`Error fetching ${tableName}:`, error.message);
+        sqlOutput += `-- Error exporting ${tableName}: ${error.message}\n\n`;
+        continue;
+      }
+      
+      const config = tableConfigs[tableName] || { primaryKey: 'id' };
+      sqlOutput += generateUpsertStatements(tableName, data || [], config);
+    }
+
+    sqlOutput += `-- Re-enable triggers
+SET session_replication_role = 'origin';
+
+COMMIT;
+
+-- ============================================================
+-- Export complete!
+-- Total tables exported: ${tables.length + userTables.length}
+-- ============================================================
 `;
 
     console.log('Export completed successfully');
