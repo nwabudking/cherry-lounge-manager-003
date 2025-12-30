@@ -89,20 +89,30 @@ export const setupApi = {
       // The trigger will create a profile with default 'cashier' role
       // We need to upgrade this to super_admin
       // Wait a moment for the trigger to complete
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await new Promise(resolve => setTimeout(resolve, 1500));
 
-      // Update the role to super_admin
+      // Update the existing role to super_admin (trigger creates 'cashier' by default)
       const { error: roleError } = await supabase
         .from('user_roles')
-        .upsert(
-          { user_id: data.user.id, role: 'super_admin' },
-          { onConflict: 'user_id' }
-        );
+        .update({ role: 'super_admin' })
+        .eq('user_id', data.user.id);
 
       if (roleError) {
         console.error('Failed to set super_admin role:', roleError);
         // User was created but role wasn't set - they'll need manual fix
         return { success: false, error: 'Account created but role assignment failed. Contact support.' };
+      }
+
+      // Verify the role was set correctly
+      const { data: roleCheck } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', data.user.id)
+        .single();
+
+      if (roleCheck?.role !== 'super_admin') {
+        console.error('Role verification failed:', roleCheck);
+        return { success: false, error: 'Role was not set to super_admin. Please contact support.' };
       }
 
       return { success: true, error: null };
