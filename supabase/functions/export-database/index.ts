@@ -211,13 +211,75 @@ SET session_replication_role = 'replica';
       }
     }
 
-    // Export user tables (profiles and user_roles) - these are special
+    // Export auth.users using admin API
+    sqlOutput += `-- ============================================
+-- AUTH.USERS (User Accounts)
+-- ============================================
+-- These are the actual user accounts from auth.users
+-- For offline deployment, you need to insert these into auth.users
+-- BEFORE inserting profiles and user_roles
+-- 
+-- NOTE: Passwords are hashed with bcrypt. Default password for all
+-- imported users is: TempPass123! (they should change on first login)
+
+`;
+
+    console.log('Exporting auth.users...');
+    try {
+      // Use admin API to list all users
+      const { data: authUsers, error: authError } = await supabase.auth.admin.listUsers({
+        page: 1,
+        perPage: 1000
+      });
+
+      if (authError) {
+        console.error('Error fetching auth.users:', authError.message);
+        sqlOutput += `-- Error exporting auth.users: ${authError.message}\n\n`;
+      } else if (authUsers?.users && authUsers.users.length > 0) {
+        const users = authUsers.users;
+        totalRows += users.length;
+        console.log(`  - auth.users: ${users.length} rows`);
+
+        sqlOutput += `-- ============================================\n`;
+        sqlOutput += `-- AUTH.USERS (${users.length} users)\n`;
+        sqlOutput += `-- ============================================\n`;
+
+        for (const authUser of users) {
+          // Cast to any to access encrypted_password which is returned but not in type
+          const userAny = authUser as any;
+          const id = escapeSqlValue(authUser.id);
+          const email = escapeSqlValue(authUser.email);
+          // Use encrypted_password if available, otherwise use a default hash for TempPass123!
+          const encryptedPassword = escapeSqlValue(userAny.encrypted_password || '$2a$10$PwQn7aGVGEDPGQa.2JwAWuPF9TZxAVGxkRz8IYUA8KxLcQ8xPpqHy');
+          const emailConfirmedAt = authUser.email_confirmed_at ? escapeSqlValue(authUser.email_confirmed_at) : 'NOW()';
+          const rawUserMetaData = escapeSqlValue(authUser.user_metadata || {});
+          const createdAt = escapeSqlValue(authUser.created_at);
+          const updatedAt = escapeSqlValue(authUser.updated_at || authUser.created_at);
+
+          sqlOutput += `INSERT INTO auth.users (id, instance_id, email, encrypted_password, email_confirmed_at, raw_app_meta_data, raw_user_meta_data, created_at, updated_at, role, aud, confirmation_token, email_change, email_change_token_new, recovery_token)
+VALUES (${id}, '00000000-0000-0000-0000-000000000000', ${email}, ${encryptedPassword}, ${emailConfirmedAt}, '{"provider": "email", "providers": ["email"]}'::jsonb, ${rawUserMetaData}, ${createdAt}, ${updatedAt}, 'authenticated', 'authenticated', '', '', '', '')
+ON CONFLICT (id) DO UPDATE SET 
+  email = EXCLUDED.email,
+  encrypted_password = EXCLUDED.encrypted_password,
+  email_confirmed_at = EXCLUDED.email_confirmed_at,
+  raw_user_meta_data = EXCLUDED.raw_user_meta_data,
+  updated_at = EXCLUDED.updated_at;\n`;
+        }
+        sqlOutput += '\n';
+      } else {
+        sqlOutput += `-- No users found in auth.users\n\n`;
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.error('Error exporting auth.users:', errorMessage);
+      sqlOutput += `-- Error exporting auth.users: ${errorMessage}\n\n`;
+    }
+
+    // Export user tables (profiles and user_roles)
     sqlOutput += `-- ============================================
 -- USER DATA (profiles and user_roles)
 -- ============================================
--- NOTE: Users must first exist in auth.users before profiles/roles can be inserted.
--- For offline deployment, create users via Supabase Auth first, then run these.
--- These statements use UPSERT to update existing records.
+-- These link to auth.users via user_id/id
 
 `;
 
@@ -244,7 +306,7 @@ COMMIT;
 
 -- ============================================================
 -- Export complete!
--- Total tables exported: ${tables.length + userTables.length}
+-- Total tables exported: ${tables.length + userTables.length + 1} (including auth.users)
 -- Total rows exported: ${totalRows}
 -- ============================================================
 `;
