@@ -13,37 +13,38 @@ export const setupApi = {
    */
   getSetupStatus: async (): Promise<SetupStatus> => {
     try {
-      // Check if any users exist by checking profiles table
-      // This is accessible without authentication
+      // Use security definer function to check if super_admin exists
+      // This bypasses RLS so unauthenticated users can check setup status
+      const { data: hasSuperAdmin, error: fnError } = await supabase
+        .rpc('check_super_admin_exists');
+
+      if (fnError) {
+        console.error('Error checking super_admin exists:', fnError);
+        // Fallback: assume system is set up (safe default)
+        return { isFirstTimeSetup: false, hasUsers: true, hasSuperAdmin: true };
+      }
+
+      // If super_admin exists, system is set up
+      if (hasSuperAdmin) {
+        return { isFirstTimeSetup: false, hasUsers: true, hasSuperAdmin: true };
+      }
+
+      // No super_admin - check if any profiles exist
       const { count, error } = await supabase
         .from('profiles')
         .select('*', { count: 'exact', head: true });
 
       if (error) {
-        console.error('Error checking setup status:', error);
-        // If we can't check, assume system is set up (safe default)
+        console.error('Error checking profiles:', error);
         return { isFirstTimeSetup: false, hasUsers: true, hasSuperAdmin: true };
       }
 
       const hasUsers = (count || 0) > 0;
 
-      // If no users, this is first-time setup
-      if (!hasUsers) {
-        return { isFirstTimeSetup: true, hasUsers: false, hasSuperAdmin: false };
-      }
-
-      // Check if a super_admin exists
-      const { count: superAdminCount } = await supabase
-        .from('user_roles')
-        .select('*', { count: 'exact', head: true })
-        .eq('role', 'super_admin');
-
-      const hasSuperAdmin = (superAdminCount || 0) > 0;
-
       return { 
-        isFirstTimeSetup: !hasSuperAdmin, 
+        isFirstTimeSetup: true, 
         hasUsers, 
-        hasSuperAdmin 
+        hasSuperAdmin: false 
       };
     } catch (error) {
       console.error('Setup status check failed:', error);
