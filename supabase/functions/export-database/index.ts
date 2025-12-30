@@ -81,6 +81,37 @@ function generateUpsertStatements(tableName: string, rows: Record<string, unknow
   return statements.join('\n') + '\n\n';
 }
 
+// Fetch all rows from a table with pagination (Supabase has 1000 row limit)
+async function fetchAllRows(supabase: any, tableName: string): Promise<Record<string, unknown>[]> {
+  const allRows: Record<string, unknown>[] = [];
+  const pageSize = 1000;
+  let offset = 0;
+  let hasMore = true;
+
+  while (hasMore) {
+    const { data, error } = await supabase
+      .from(tableName)
+      .select('*')
+      .range(offset, offset + pageSize - 1)
+      .order('id', { ascending: true });
+
+    if (error) {
+      console.error(`Error fetching ${tableName} at offset ${offset}:`, error.message);
+      throw error;
+    }
+
+    if (data && data.length > 0) {
+      allRows.push(...data);
+      offset += pageSize;
+      hasMore = data.length === pageSize;
+    } else {
+      hasMore = false;
+    }
+  }
+
+  return allRows;
+}
+
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -128,7 +159,6 @@ serve(async (req) => {
     console.log('Starting database export for user:', user.email);
 
     // Define tables to export in correct order (respecting foreign keys)
-    // profiles and user_roles are exported but commented out (users must be created via auth first)
     const tables = [
       'restaurant_settings',
       'suppliers',
@@ -162,19 +192,23 @@ SET session_replication_role = 'replica';
 
 `;
 
-    // Export main tables
+    let totalRows = 0;
+
+    // Export main tables with pagination
     for (const tableName of tables) {
       console.log(`Exporting table: ${tableName}`);
-      const { data, error } = await supabase.from(tableName).select('*');
-      
-      if (error) {
-        console.error(`Error fetching ${tableName}:`, error.message);
-        sqlOutput += `-- Error exporting ${tableName}: ${error.message}\n\n`;
-        continue;
+      try {
+        const data = await fetchAllRows(supabase, tableName);
+        totalRows += data.length;
+        console.log(`  - ${tableName}: ${data.length} rows`);
+        
+        const config = tableConfigs[tableName] || { primaryKey: 'id' };
+        sqlOutput += generateUpsertStatements(tableName, data, config);
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        console.error(`Error exporting ${tableName}:`, errorMessage);
+        sqlOutput += `-- Error exporting ${tableName}: ${errorMessage}\n\n`;
       }
-      
-      const config = tableConfigs[tableName] || { primaryKey: 'id' };
-      sqlOutput += generateUpsertStatements(tableName, data || [], config);
     }
 
     // Export user tables (profiles and user_roles) - these are special
@@ -189,16 +223,18 @@ SET session_replication_role = 'replica';
 
     for (const tableName of userTables) {
       console.log(`Exporting user table: ${tableName}`);
-      const { data, error } = await supabase.from(tableName).select('*');
-      
-      if (error) {
-        console.error(`Error fetching ${tableName}:`, error.message);
-        sqlOutput += `-- Error exporting ${tableName}: ${error.message}\n\n`;
-        continue;
+      try {
+        const data = await fetchAllRows(supabase, tableName);
+        totalRows += data.length;
+        console.log(`  - ${tableName}: ${data.length} rows`);
+        
+        const config = tableConfigs[tableName] || { primaryKey: 'id' };
+        sqlOutput += generateUpsertStatements(tableName, data, config);
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        console.error(`Error exporting ${tableName}:`, errorMessage);
+        sqlOutput += `-- Error exporting ${tableName}: ${errorMessage}\n\n`;
       }
-      
-      const config = tableConfigs[tableName] || { primaryKey: 'id' };
-      sqlOutput += generateUpsertStatements(tableName, data || [], config);
     }
 
     sqlOutput += `-- Re-enable triggers
@@ -209,10 +245,11 @@ COMMIT;
 -- ============================================================
 -- Export complete!
 -- Total tables exported: ${tables.length + userTables.length}
+-- Total rows exported: ${totalRows}
 -- ============================================================
 `;
 
-    console.log('Export completed successfully');
+    console.log(`Export completed successfully. Total rows: ${totalRows}`);
 
     return new Response(sqlOutput, {
       headers: {
