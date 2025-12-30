@@ -247,7 +247,25 @@ AS $$
     )
 $$;
 
--- Trigger function to update updated_at
+-- Function to check if super_admin exists (for setup status check)
+-- Allows unauthenticated users to check if initial setup is needed
+CREATE OR REPLACE FUNCTION public.check_super_admin_exists()
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.user_roles
+    WHERE role = 'super_admin'
+  )
+$$;
+
+-- Grant execute to anon and authenticated roles
+GRANT EXECUTE ON FUNCTION public.check_super_admin_exists() TO anon;
+GRANT EXECUTE ON FUNCTION public.check_super_admin_exists() TO authenticated;
 CREATE OR REPLACE FUNCTION public.update_updated_at_column()
 RETURNS TRIGGER
 LANGUAGE plpgsql
