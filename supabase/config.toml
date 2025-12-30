@@ -11,3 +11,12 @@ verify_jwt = false
 
 [functions.manage-staff]
 verify_jwt = false
+
+[functions.export-database]
+verify_jwt = false
+
+[functions.migrate-openpos]
+verify_jwt = false
+
+[functions.sync-menu-inventory]
+verify_jwt = false
