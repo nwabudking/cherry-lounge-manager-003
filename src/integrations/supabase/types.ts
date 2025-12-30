@@ -562,6 +562,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      check_super_admin_exists: { Args: never; Returns: boolean }
       generate_order_number: { Args: never; Returns: string }
       get_user_role: {
         Args: { _user_id: string }
