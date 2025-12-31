@@ -9,6 +9,7 @@ import { ActivityLogSection } from "@/components/reports/ActivityLogSection";
 import { ExportPDFButton } from "@/components/reports/ExportPDFButton";
 import { startOfDay, endOfDay, subDays, format } from "date-fns";
 import { ordersApi } from "@/lib/api/orders";
+import { activityLogApi, type ActivityLog } from "@/lib/api/activityLog";
 import { useUserRole } from "@/hooks/useUserRole";
 import { Badge } from "@/components/ui/badge";
 import { User, AlertCircle } from "lucide-react";
@@ -71,6 +72,19 @@ const Reports = () => {
         filterUserId || undefined
       );
       return data as OrderWithDetails[];
+    },
+  });
+
+  // Fetch activity logs for the date range
+  const { data: activityLogs = [] } = useQuery({
+    queryKey: ["reports-activity-logs", start.toISOString(), end.toISOString()],
+    queryFn: async () => {
+      const data = await activityLogApi.getActivityLogs({
+        startDate: start.toISOString(),
+        endDate: end.toISOString(),
+        limit: 500,
+      });
+      return data;
     },
   });
 
@@ -184,6 +198,7 @@ const Reports = () => {
             salesByType={salesByTypeData}
             salesByPayment={Object.entries(salesByPayment).map(([type, value]) => ({ type, value }))}
             revenueByDay={revenueChartData}
+            activityLogs={activityLogs}
             isPersonalView={isPersonalView}
             roleName={role ? getRoleDisplayName(role) : undefined}
           />

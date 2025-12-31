@@ -3,6 +3,7 @@ import { FileDown, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { format } from "date-fns";
 import { toast } from "sonner";
+import type { ActivityLog } from "@/lib/api/activityLog";
 
 interface ExportPDFButtonProps {
   startDate: Date;
@@ -15,9 +16,39 @@ interface ExportPDFButtonProps {
   salesByType: { type: string; value: number }[];
   salesByPayment: { type: string; value: number }[];
   revenueByDay: { date: string; revenue: number }[];
+  activityLogs?: ActivityLog[];
   isPersonalView?: boolean;
   roleName?: string;
 }
+
+const getActionLabel = (actionType: string): string => {
+  const labels: Record<string, string> = {
+    inventory_add: "Added Item",
+    inventory_remove: "Removed Item",
+    inventory_update: "Updated Item",
+    inventory_delete: "Deleted Item",
+    stock_in: "Stock In",
+    stock_out: "Stock Out",
+    stock_adjust: "Stock Adjusted",
+    user_add: "User Added",
+    user_delete: "User Deleted",
+    user_update: "User Updated",
+    supplier_add: "Supplier Added",
+    supplier_update: "Supplier Updated",
+    supplier_delete: "Supplier Deleted",
+  };
+  return labels[actionType] || actionType;
+};
+
+const getEntityLabel = (entityType: string): string => {
+  const labels: Record<string, string> = {
+    inventory_item: "Inventory",
+    user: "User",
+    supplier: "Supplier",
+    stock_movement: "Stock",
+  };
+  return labels[entityType] || entityType;
+};
 
 export const ExportPDFButton = ({
   startDate,
@@ -30,6 +61,7 @@ export const ExportPDFButton = ({
   salesByType,
   salesByPayment,
   revenueByDay,
+  activityLogs = [],
   isPersonalView,
   roleName,
 }: ExportPDFButtonProps) => {
@@ -185,6 +217,44 @@ export const ExportPDFButton = ({
           ]),
           theme: "striped",
           headStyles: { fillColor: [249, 115, 22] },
+        });
+
+        yPos = (doc as any).lastAutoTable.finalY + 15;
+      }
+
+      // Activity Log Section
+      if (activityLogs.length > 0) {
+        // Check if we need a new page
+        if (yPos > 180) {
+          doc.addPage();
+          yPos = 20;
+        }
+
+        doc.setFontSize(14);
+        doc.setFont("helvetica", "bold");
+        doc.text("Activity Log", 14, yPos);
+        yPos += 8;
+
+        autoTable(doc, {
+          startY: yPos,
+          head: [["Date/Time", "Action", "Category", "Item", "Performed By"]],
+          body: activityLogs.map((log) => [
+            format(new Date(log.created_at), "MMM d, h:mm a"),
+            getActionLabel(log.action_type),
+            getEntityLabel(log.entity_type),
+            log.entity_name || "-",
+            log.performed_by_name || "System",
+          ]),
+          theme: "striped",
+          headStyles: { fillColor: [107, 114, 128] },
+          styles: { fontSize: 8 },
+          columnStyles: {
+            0: { cellWidth: 35 },
+            1: { cellWidth: 30 },
+            2: { cellWidth: 25 },
+            3: { cellWidth: 50 },
+            4: { cellWidth: 40 },
+          },
         });
       }
 
