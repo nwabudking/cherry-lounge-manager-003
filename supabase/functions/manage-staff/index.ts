@@ -208,6 +208,8 @@ serve(async (req) => {
     if (action === "delete") {
       const { userId } = body;
       
+      console.log("Delete staff request - userId:", userId);
+      
       if (!userId) {
         return new Response(JSON.stringify({ error: "User ID required" }), {
           status: 400,
@@ -223,16 +225,68 @@ serve(async (req) => {
         });
       }
 
-      // Delete user (this cascades to profiles and roles)
+      // Get user info before deletion for logging
+      const { data: targetProfile } = await supabaseAdmin
+        .from("profiles")
+        .select("full_name, email")
+        .eq("id", userId)
+        .single();
+      
+      const deletedUserName = targetProfile?.full_name || targetProfile?.email || userId;
+
+      // Step 1: Delete from user_roles first (if not cascaded)
+      console.log("Deleting user roles...");
+      const { error: roleDeleteError } = await supabaseAdmin
+        .from("user_roles")
+        .delete()
+        .eq("user_id", userId);
+      
+      if (roleDeleteError) {
+        console.error("Role delete error:", roleDeleteError);
+      }
+
+      // Step 2: Delete from profiles (if not cascaded)
+      console.log("Deleting profile...");
+      const { error: profileDeleteError } = await supabaseAdmin
+        .from("profiles")
+        .delete()
+        .eq("id", userId);
+      
+      if (profileDeleteError) {
+        console.error("Profile delete error:", profileDeleteError);
+      }
+
+      // Step 3: Delete auth user (this should cascade, but we did manual cleanup above)
+      console.log("Deleting auth user...");
       const { error: deleteError } = await supabaseAdmin.auth.admin.deleteUser(userId);
 
       if (deleteError) {
+        console.error("Auth delete error:", deleteError);
         return new Response(JSON.stringify({ error: deleteError.message }), {
           status: 400,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
+      // Log the activity
+      console.log("Logging user deletion activity...");
+      const { data: performerProfile } = await supabaseAdmin
+        .from("profiles")
+        .select("full_name, email")
+        .eq("id", requestingUser.id)
+        .single();
+      
+      await supabaseAdmin.from("activity_logs").insert([{
+        action_type: "user_delete",
+        entity_type: "user",
+        entity_id: userId,
+        entity_name: deletedUserName,
+        details: { deleted_by_role: requestingUserRole },
+        performed_by: requestingUser.id,
+        performed_by_name: performerProfile?.full_name || performerProfile?.email,
+      }]);
+
+      console.log("User deletion complete");
       return new Response(JSON.stringify({ success: true }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },

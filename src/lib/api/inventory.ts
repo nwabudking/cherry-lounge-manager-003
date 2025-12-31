@@ -1,6 +1,7 @@
 import { supabase } from '@/integrations/supabase/client';
 import type { TablesInsert, TablesUpdate } from '@/integrations/supabase/types';
 import { duplicateCheck } from '@/lib/utils/duplicateCheck';
+import { activityLogApi } from './activityLog';
 
 export interface InventoryItem {
   id: string;
@@ -132,6 +133,16 @@ export const inventoryApi = {
       }
       throw new Error(error.message);
     }
+
+    // Log activity
+    await activityLogApi.logActivity({
+      action_type: 'inventory_add',
+      entity_type: 'inventory_item',
+      entity_id: data.id,
+      entity_name: data.name,
+      details: { unit: data.unit, initial_stock: data.current_stock },
+    });
+
     return data as InventoryItem;
   },
 
@@ -169,16 +180,41 @@ export const inventoryApi = {
       }
       throw new Error(error.message);
     }
+
+    // Log activity
+    await activityLogApi.logActivity({
+      action_type: 'inventory_update',
+      entity_type: 'inventory_item',
+      entity_id: data.id,
+      entity_name: data.name,
+      details: { updated_fields: Object.keys(updateData).join(', ') },
+    });
+
     return data as InventoryItem;
   },
 
   deleteItem: async (id: string): Promise<void> => {
+    // Get item name before deleting
+    const { data: item } = await supabase
+      .from('inventory_items')
+      .select('name')
+      .eq('id', id)
+      .single();
+
     const { error } = await supabase
       .from('inventory_items')
       .delete()
       .eq('id', id);
     
     if (error) throw new Error(error.message);
+
+    // Log activity
+    await activityLogApi.logActivity({
+      action_type: 'inventory_delete',
+      entity_type: 'inventory_item',
+      entity_id: id,
+      entity_name: item?.name || 'Unknown Item',
+    });
   },
 
   // Stock Movements
@@ -197,10 +233,10 @@ export const inventoryApi = {
   },
 
   addStock: async (itemId: string, quantity: number, notes?: string): Promise<StockMovement> => {
-    // Get current stock
+    // Get current stock and name
     const { data: item, error: itemError } = await supabase
       .from('inventory_items')
-      .select('current_stock')
+      .select('current_stock, name')
       .eq('id', itemId)
       .single();
     
@@ -230,14 +266,24 @@ export const inventoryApi = {
       .single();
     
     if (error) throw new Error(error.message);
+
+    // Log activity
+    await activityLogApi.logActivity({
+      action_type: 'stock_in',
+      entity_type: 'stock_movement',
+      entity_id: itemId,
+      entity_name: item.name,
+      details: { quantity, previous_stock: previousStock, new_stock: newStock, notes },
+    });
+
     return data as StockMovement;
   },
 
   removeStock: async (itemId: string, quantity: number, notes?: string): Promise<StockMovement> => {
-    // Get current stock
+    // Get current stock and name
     const { data: item, error: itemError } = await supabase
       .from('inventory_items')
-      .select('current_stock')
+      .select('current_stock, name')
       .eq('id', itemId)
       .single();
     
@@ -267,14 +313,24 @@ export const inventoryApi = {
       .single();
     
     if (error) throw new Error(error.message);
+
+    // Log activity
+    await activityLogApi.logActivity({
+      action_type: 'stock_out',
+      entity_type: 'stock_movement',
+      entity_id: itemId,
+      entity_name: item.name,
+      details: { quantity, previous_stock: previousStock, new_stock: newStock, notes },
+    });
+
     return data as StockMovement;
   },
 
   adjustStock: async (itemId: string, newStockLevel: number, notes?: string): Promise<StockMovement> => {
-    // Get current stock
+    // Get current stock and name
     const { data: item, error: itemError } = await supabase
       .from('inventory_items')
-      .select('current_stock')
+      .select('current_stock, name')
       .eq('id', itemId)
       .single();
     
@@ -304,6 +360,16 @@ export const inventoryApi = {
       .single();
     
     if (error) throw new Error(error.message);
+
+    // Log activity
+    await activityLogApi.logActivity({
+      action_type: 'stock_adjust',
+      entity_type: 'stock_movement',
+      entity_id: itemId,
+      entity_name: item.name,
+      details: { previous_stock: previousStock, new_stock: newStockLevel, notes },
+    });
+
     return data as StockMovement;
   },
 

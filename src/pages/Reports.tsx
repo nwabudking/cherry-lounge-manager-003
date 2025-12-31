@@ -5,6 +5,7 @@ import { SalesMetrics } from "@/components/reports/SalesMetrics";
 import { RevenueChart } from "@/components/reports/RevenueChart";
 import { TopItemsChart } from "@/components/reports/TopItemsChart";
 import { SalesByType } from "@/components/reports/SalesByType";
+import { ActivityLogSection } from "@/components/reports/ActivityLogSection";
 import { startOfDay, endOfDay, subDays, format } from "date-fns";
 import { ordersApi } from "@/lib/api/orders";
 import { useUserRole } from "@/hooks/useUserRole";
@@ -12,7 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { User, AlertCircle } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 
-export type DateRange = "today" | "7days" | "30days" | "custom";
+export type DateRange = "today" | "7days" | "30days" | "custom" | "multiday";
 
 interface OrderWithDetails {
   id: string;
@@ -28,6 +29,7 @@ const Reports = () => {
   const [dateRange, setDateRange] = useState<DateRange>("7days");
   const [customStart, setCustomStart] = useState<Date | undefined>();
   const [customEnd, setCustomEnd] = useState<Date | undefined>();
+  const [selectedDays, setSelectedDays] = useState<Date[]>([]);
   const { permissions, getFilterUserId, role, isPrivilegedUser } = useUserRole();
 
   // Get the filter user ID for non-privileged users
@@ -48,13 +50,19 @@ const Reports = () => {
           start: customStart ? startOfDay(customStart) : startOfDay(subDays(now, 7)),
           end: customEnd ? endOfDay(customEnd) : endOfDay(now),
         };
+      case "multiday":
+        if (selectedDays.length === 0) {
+          return { start: startOfDay(now), end: endOfDay(now) };
+        }
+        const sortedDays = [...selectedDays].sort((a, b) => a.getTime() - b.getTime());
+        return { start: startOfDay(sortedDays[0]), end: endOfDay(sortedDays[sortedDays.length - 1]) };
     }
   };
 
   const { start, end } = getDateFilter();
 
   const { data: orders = [], isLoading, error } = useQuery({
-    queryKey: ["reports-orders", dateRange, customStart, customEnd, filterUserId],
+    queryKey: ["reports-orders", dateRange, customStart, customEnd, selectedDays, filterUserId],
     queryFn: async () => {
       const data = await ordersApi.getCompletedOrdersByDate(
         start.toISOString(),
@@ -160,6 +168,8 @@ const Reports = () => {
           setCustomStart={setCustomStart}
           customEnd={customEnd}
           setCustomEnd={setCustomEnd}
+          selectedDays={selectedDays}
+          setSelectedDays={setSelectedDays}
         />
         <div className="flex items-center gap-2">
           {isPersonalView && (
@@ -203,6 +213,16 @@ const Reports = () => {
           data={Object.entries(salesByPayment).map(([type, value]) => ({ type, value }))}
           title="Sales by Payment Method"
           isLoading={isLoading}
+        />
+      </div>
+
+      {/* Activity Log Section */}
+      <ActivityLogSection startDate={start} endDate={end} />
+    </div>
+  );
+};
+
+export default Reports;
         />
       </div>
     </div>
