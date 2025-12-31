@@ -24,6 +24,8 @@ interface ReportsHeaderProps {
   setCustomStart: (date: Date | undefined) => void;
   customEnd: Date | undefined;
   setCustomEnd: (date: Date | undefined) => void;
+  selectedDays?: Date[];
+  setSelectedDays?: (days: Date[]) => void;
 }
 
 export const ReportsHeader = ({
@@ -33,6 +35,8 @@ export const ReportsHeader = ({
   setCustomStart,
   customEnd,
   setCustomEnd,
+  selectedDays = [],
+  setSelectedDays,
 }: ReportsHeaderProps) => {
   return (
     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -50,6 +54,7 @@ export const ReportsHeader = ({
             <SelectItem value="today">Today</SelectItem>
             <SelectItem value="7days">Last 7 Days</SelectItem>
             <SelectItem value="30days">Last 30 Days</SelectItem>
+            <SelectItem value="multiday">Select Days</SelectItem>
             <SelectItem value="custom">Custom Range</SelectItem>
           </SelectContent>
         </Select>
@@ -104,6 +109,34 @@ export const ReportsHeader = ({
               </PopoverContent>
             </Popover>
           </div>
+        )}
+
+        {dateRange === "multiday" && setSelectedDays && (
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                className={cn(
+                  "w-[200px] justify-start text-left font-normal bg-background",
+                  selectedDays.length === 0 && "text-muted-foreground"
+                )}
+              >
+                <CalendarIcon className="mr-2 h-4 w-4" />
+                {selectedDays.length > 0
+                  ? `${selectedDays.length} day(s) selected`
+                  : "Select days"}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0">
+              <Calendar
+                mode="multiple"
+                selected={selectedDays}
+                onSelect={(days) => setSelectedDays(days || [])}
+                initialFocus
+                className="pointer-events-auto"
+              />
+            </PopoverContent>
+          </Popover>
         )}
       </div>
     </div>
