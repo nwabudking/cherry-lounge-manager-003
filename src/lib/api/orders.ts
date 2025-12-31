@@ -282,12 +282,7 @@ export const ordersApi = {
         });
     }
 
-    // 5. Update order status to completed
-    await supabase
-      .from('orders')
-      .update({ status: 'completed' })
-      .eq('id', order.id);
-
+    // Return order with pending status (kitchen/bar will update to preparing -> ready -> completed)
     return { ...order, order_number: orderNumber } as Order;
   },
 

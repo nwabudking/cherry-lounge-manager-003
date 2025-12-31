@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { Minus, Plus, Trash2, ShoppingCart } from "lucide-react";
+import { Minus, Plus, Trash2, ShoppingCart, Pause } from "lucide-react";
 import { CartItem } from "@/pages/POS";
 import { CustomerSelect } from "./CustomerSelect";
 import type { Customer } from "@/lib/api/customers";
@@ -15,6 +15,7 @@ interface CartPanelProps {
   onRemoveItem: (id: string) => void;
   onClearCart: () => void;
   onCheckout: () => void;
+  onSuspend?: () => void;
   selectedCustomer: Customer | null;
   onSelectCustomer: (customer: Customer | null) => void;
 }
@@ -35,6 +36,7 @@ export const CartPanel = ({
   onRemoveItem,
   onClearCart,
   onCheckout,
+  onSuspend,
   selectedCustomer,
   onSelectCustomer,
 }: CartPanelProps) => {
@@ -138,12 +140,24 @@ export const CartPanel = ({
             <span className="text-primary">{formatPrice(total)}</span>
           </div>
 
-          <Button
-            className="w-full h-12 text-base font-semibold"
-            onClick={onCheckout}
-          >
-            Checkout
-          </Button>
+          <div className="flex gap-2">
+            {onSuspend && (
+              <Button
+                variant="outline"
+                className="h-12 px-4"
+                onClick={onSuspend}
+              >
+                <Pause className="h-4 w-4 mr-1" />
+                Hold
+              </Button>
+            )}
+            <Button
+              className="flex-1 h-12 text-base font-semibold"
+              onClick={onCheckout}
+            >
+              Checkout
+            </Button>
+          </div>
         </div>
       )}
     </Card>

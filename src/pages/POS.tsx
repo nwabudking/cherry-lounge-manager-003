@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
@@ -11,7 +11,7 @@ import { CategoryTabs } from "@/components/pos/CategoryTabs";
 import { MenuGrid } from "@/components/pos/MenuGrid";
 import { CartPanel } from "@/components/pos/CartPanel";
 import { CheckoutDialog } from "@/components/pos/CheckoutDialog";
-import { CustomerSelect } from "@/components/pos/CustomerSelect";
+import { SuspendedOrdersPanel, SuspendedOrder } from "@/components/pos/SuspendedOrdersPanel";
 import { generateUUID } from "@/lib/utils/uuid";
 
 export interface CartItem {
@@ -32,6 +32,8 @@ interface CompletedOrder {
   created_at: string;
 }
 
+const SUSPENDED_ORDERS_KEY = "pos_suspended_orders";
+
 const POS = () => {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -46,6 +48,24 @@ const POS = () => {
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [completedOrder, setCompletedOrder] = useState<CompletedOrder | null>(null);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  const [suspendedOrders, setSuspendedOrders] = useState<SuspendedOrder[]>([]);
+
+  // Load suspended orders from localStorage on mount
+  useEffect(() => {
+    const saved = localStorage.getItem(SUSPENDED_ORDERS_KEY);
+    if (saved) {
+      try {
+        setSuspendedOrders(JSON.parse(saved));
+      } catch (e) {
+        console.error("Failed to load suspended orders:", e);
+      }
+    }
+  }, []);
+
+  // Save suspended orders to localStorage whenever they change
+  useEffect(() => {
+    localStorage.setItem(SUSPENDED_ORDERS_KEY, JSON.stringify(suspendedOrders));
+  }, [suspendedOrders]);
 
   const { data: rawCategories } = useActiveMenuCategories();
   const { data: rawMenuItems } = useActiveMenuItems(selectedCategory || undefined);
@@ -149,6 +169,58 @@ const POS = () => {
 
   const clearCart = () => setCart([]);
 
+  // Suspend current order
+  const handleSuspendOrder = () => {
+    if (cart.length === 0) return;
+
+    const suspendedOrder: SuspendedOrder = {
+      id: generateUUID(),
+      cart: [...cart],
+      orderType,
+      tableNumber,
+      suspendedAt: new Date().toISOString(),
+      customerName: selectedCustomer?.name,
+    };
+
+    setSuspendedOrders((prev) => [...prev, suspendedOrder]);
+    setCart([]);
+    setTableNumber("");
+    setSelectedCustomer(null);
+    setOrderType("dine_in");
+
+    toast({
+      title: "Order Suspended",
+      description: "Order has been put on hold. Resume it anytime.",
+    });
+  };
+
+  // Resume suspended order
+  const handleResumeOrder = (order: SuspendedOrder) => {
+    // If current cart has items, suspend it first
+    if (cart.length > 0) {
+      handleSuspendOrder();
+    }
+
+    setCart(order.cart);
+    setOrderType(order.orderType);
+    setTableNumber(order.tableNumber);
+    setSuspendedOrders((prev) => prev.filter((o) => o.id !== order.id));
+
+    toast({
+      title: "Order Resumed",
+      description: "Suspended order has been loaded.",
+    });
+  };
+
+  // Delete suspended order
+  const handleDeleteSuspendedOrder = (orderId: string) => {
+    setSuspendedOrders((prev) => prev.filter((o) => o.id !== orderId));
+    toast({
+      title: "Order Deleted",
+      description: "Suspended order has been removed.",
+    });
+  };
+
   const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const total = subtotal;
 
@@ -181,6 +253,15 @@ const POS = () => {
           setTableNumber={setTableNumber}
         />
 
+        {/* Suspended Orders Panel */}
+        <div className="px-4">
+          <SuspendedOrdersPanel
+            suspendedOrders={suspendedOrders}
+            onResume={handleResumeOrder}
+            onDelete={handleDeleteSuspendedOrder}
+          />
+        </div>
+
         <CategoryTabs
           categories={categories}
           selectedCategory={selectedCategory}
@@ -201,6 +282,7 @@ const POS = () => {
         onRemoveItem={removeFromCart}
         onClearCart={clearCart}
         onCheckout={() => setIsCheckoutOpen(true)}
+        onSuspend={cart.length > 0 ? handleSuspendOrder : undefined}
         selectedCustomer={selectedCustomer}
         onSelectCustomer={setSelectedCustomer}
       />
