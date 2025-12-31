@@ -234,7 +234,46 @@ serve(async (req) => {
       
       const deletedUserName = targetProfile?.full_name || targetProfile?.email || userId;
 
-      // Step 1: Delete from user_roles first (if not cascaded)
+      // Step 1: Nullify foreign key references in orders, payments, stock_movements
+      console.log("Nullifying foreign key references...");
+      
+      const { error: ordersUpdateError } = await supabaseAdmin
+        .from("orders")
+        .update({ created_by: null })
+        .eq("created_by", userId);
+      
+      if (ordersUpdateError) {
+        console.error("Orders update error:", ordersUpdateError);
+      }
+
+      const { error: paymentsUpdateError } = await supabaseAdmin
+        .from("payments")
+        .update({ created_by: null })
+        .eq("created_by", userId);
+      
+      if (paymentsUpdateError) {
+        console.error("Payments update error:", paymentsUpdateError);
+      }
+
+      const { error: stockMovementsUpdateError } = await supabaseAdmin
+        .from("stock_movements")
+        .update({ created_by: null })
+        .eq("created_by", userId);
+      
+      if (stockMovementsUpdateError) {
+        console.error("Stock movements update error:", stockMovementsUpdateError);
+      }
+
+      const { error: activityLogsUpdateError } = await supabaseAdmin
+        .from("activity_logs")
+        .update({ performed_by: null })
+        .eq("performed_by", userId);
+      
+      if (activityLogsUpdateError) {
+        console.error("Activity logs update error:", activityLogsUpdateError);
+      }
+
+      // Step 2: Delete from user_roles first (if not cascaded)
       console.log("Deleting user roles...");
       const { error: roleDeleteError } = await supabaseAdmin
         .from("user_roles")
@@ -245,7 +284,7 @@ serve(async (req) => {
         console.error("Role delete error:", roleDeleteError);
       }
 
-      // Step 2: Delete from profiles (if not cascaded)
+      // Step 3: Delete from profiles (if not cascaded)
       console.log("Deleting profile...");
       const { error: profileDeleteError } = await supabaseAdmin
         .from("profiles")
@@ -256,7 +295,7 @@ serve(async (req) => {
         console.error("Profile delete error:", profileDeleteError);
       }
 
-      // Step 3: Delete auth user (this should cascade, but we did manual cleanup above)
+      // Step 4: Delete auth user
       console.log("Deleting auth user...");
       const { error: deleteError } = await supabaseAdmin.auth.admin.deleteUser(userId);
 
