@@ -223,10 +223,3 @@ const Reports = () => {
 };
 
 export default Reports;
-        />
-      </div>
-    </div>
-  );
-};
-
-export default Reports;
