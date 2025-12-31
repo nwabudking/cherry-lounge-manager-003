@@ -6,6 +6,7 @@ import { RevenueChart } from "@/components/reports/RevenueChart";
 import { TopItemsChart } from "@/components/reports/TopItemsChart";
 import { SalesByType } from "@/components/reports/SalesByType";
 import { ActivityLogSection } from "@/components/reports/ActivityLogSection";
+import { ExportPDFButton } from "@/components/reports/ExportPDFButton";
 import { startOfDay, endOfDay, subDays, format } from "date-fns";
 import { ordersApi } from "@/lib/api/orders";
 import { useUserRole } from "@/hooks/useUserRole";
@@ -172,6 +173,20 @@ const Reports = () => {
           setSelectedDays={setSelectedDays}
         />
         <div className="flex items-center gap-2">
+          <ExportPDFButton
+            startDate={start}
+            endDate={end}
+            totalRevenue={totalRevenue}
+            totalOrders={totalOrders}
+            averageOrderValue={averageOrderValue}
+            totalItems={totalItems}
+            topItems={topItems}
+            salesByType={salesByTypeData}
+            salesByPayment={Object.entries(salesByPayment).map(([type, value]) => ({ type, value }))}
+            revenueByDay={revenueChartData}
+            isPersonalView={isPersonalView}
+            roleName={role ? getRoleDisplayName(role) : undefined}
+          />
           {isPersonalView && (
             <Badge variant="outline" className="flex items-center gap-1">
               <User className="w-3 h-3" />
