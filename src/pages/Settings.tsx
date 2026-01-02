@@ -4,7 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useSettings, useUpdateSettings } from "@/hooks/useSettings";
 import { unifiedAuth } from "@/lib/auth";
 import { toast } from "sonner";
-import { Settings as SettingsIcon, Building2, Receipt, User, Save, Loader2 } from "lucide-react";
+import { Settings as SettingsIcon, Building2, Receipt, User, Save, Loader2, Palette } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -13,6 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { Navigate } from "react-router-dom";
+import { ThemeSelector } from "@/components/settings/ThemeSelector";
 
 const Settings = () => {
   const { role } = useAuth();
@@ -68,9 +69,10 @@ const Settings = () => {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-3 lg:w-auto lg:inline-grid">
+        <TabsList className="grid w-full grid-cols-4 lg:w-auto lg:inline-grid">
           <TabsTrigger value="restaurant"><Building2 className="h-4 w-4 mr-2 hidden sm:block" />Restaurant</TabsTrigger>
           <TabsTrigger value="receipt"><Receipt className="h-4 w-4 mr-2 hidden sm:block" />Receipt</TabsTrigger>
+          <TabsTrigger value="themes"><Palette className="h-4 w-4 mr-2 hidden sm:block" />Themes</TabsTrigger>
           <TabsTrigger value="account"><User className="h-4 w-4 mr-2 hidden sm:block" />Account</TabsTrigger>
         </TabsList>
 
@@ -121,6 +123,10 @@ const Settings = () => {
               </Button>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="themes">
+          <ThemeSelector />
         </TabsContent>
 
         <TabsContent value="account">
