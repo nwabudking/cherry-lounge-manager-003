@@ -12,7 +12,8 @@ import { ordersApi } from "@/lib/api/orders";
 import { activityLogApi, type ActivityLog } from "@/lib/api/activityLog";
 import { useUserRole } from "@/hooks/useUserRole";
 import { Badge } from "@/components/ui/badge";
-import { User, AlertCircle } from "lucide-react";
+import { User, AlertCircle, Printer } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 
 export type DateRange = "today" | "7days" | "30days" | "custom" | "multiday";
@@ -187,6 +188,14 @@ const Reports = () => {
           setSelectedDays={setSelectedDays}
         />
         <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={() => window.print()}
+            className="gap-2"
+          >
+            <Printer className="h-4 w-4" />
+            Print
+          </Button>
           <ExportPDFButton
             startDate={start}
             endDate={end}
